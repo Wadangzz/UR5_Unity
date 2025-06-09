@@ -265,11 +265,6 @@
     </property>
     <item>
      <property name="text">
-      <string>SCARA</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
       <string>UR5</string>
      </property>
     </item>
@@ -625,6 +620,26 @@
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
+ <tabstops>
+  <tabstop>lineEdit_IP</tabstop>
+  <tabstop>lineEdit_PORT</tabstop>
+  <tabstop>pb_Conn</tabstop>
+  <tabstop>pB_Disconn</tabstop>
+  <tabstop>slider_X</tabstop>
+  <tabstop>slider_Y</tabstop>
+  <tabstop>slider_Z</tabstop>
+  <tabstop>slider_RX</tabstop>
+  <tabstop>slider_RY</tabstop>
+  <tabstop>slider_RZ</tabstop>
+  <tabstop>slider_J1</tabstop>
+  <tabstop>slider_J2</tabstop>
+  <tabstop>slider_J3</tabstop>
+  <tabstop>slider_J4</tabstop>
+  <tabstop>slider_J5</tabstop>
+  <tabstop>slider_J6</tabstop>
+  <tabstop>comboBox_Robot</tabstop>
+  <tabstop>pB_Queuepos</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>
