@@ -61,9 +61,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         start = np.array(init)
         end = np.array(end)
 
-        d_theta, trajectory = math.joint_trajectory(start,end,times=1.0,samples=200)
+        d_theta, trajectory = math.joint_trajectory(start,end,times=1.0,samples=100)
 
-        visual.plot_trajectory(start,d_theta,L)
+        # visual.plot_trajectory(start,d_theta,L)
 
         for angles in trajectory:
             # JSON 직렬화

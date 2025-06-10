@@ -1,6 +1,8 @@
 # UR5_Unity
 <p align="center">
-  <img src="UR5.gif" width="45%">
+  <img src="UR5.gif" width="30%">
+  <img src="UR5_2.gif" width="30%">
+  <img src="UR5_3.gif" width="30%">
 </p>
 
 **UR5 로봇의 Joint Space Trajectory 데이터를 Unity에서 실시간 시각화**하기 위한 시스템입니다.  
@@ -46,7 +48,9 @@ UR5 오브젝트 실시간 동작 확인
 📌 주의사항
 현재는 Joint Space 기반 trajectory만 지원됩니다.
 
-Task Space trajectory 및 특이점 회피, 충돌 회피 등은 추후 업데이트 예정입니다.   
+
+Task Space trajectory 및 특이점 회피, 충돌 회피 
+Joint angle Limit 설정 등은 추후 업데이트 예정입니다.   
 QT GUI 또는 Unity 캔버스 GUI 추후 추가 예정
 
 ---
