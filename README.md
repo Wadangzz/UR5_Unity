@@ -1,7 +1,6 @@
 # UR5_Unity
 <p align="center">
   <img src="UR5.gif" width="45%">
-  
 </p>
 
 **UR5 로봇의 Joint Space Trajectory 데이터를 Unity에서 실시간 시각화**하기 위한 시스템입니다.  
