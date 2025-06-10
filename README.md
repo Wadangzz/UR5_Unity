@@ -44,9 +44,9 @@ pythonControl 폴더 내 Python ur5_joint.py 실행
 x, y, z, Rx, Ry, Rz 입력하여 trajectory 생성 후
 UR5 오브젝트 실시간 동작 확인
 
---
+---
 
-📌 주의사항
+## 📌 주의사항
 현재는 Joint Space 기반 trajectory만 지원됩니다.
 
 
