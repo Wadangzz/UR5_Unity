@@ -1,4 +1,4 @@
-# UR5_Unity
+⁹# UR5_Unity
 <p align="center">
   <img src="UR5.gif" width="30%">
   <img src="UR5_2.gif" width="30%">
@@ -40,7 +40,7 @@ pip install numpy scipy matplotlib
 UR5_RUN 폴더 내에 Unity Bulid UR5 실행   
 python 실행 전 까지 TCP listen 대기
 
-pythonControl 폴더 내 Python ur5_joint.py 실행
+pythonControl 폴더 내 ur5_joint.py 실행
 x, y, z, Rx, Ry, Rz 입력하여 trajectory 생성 후
 UR5 오브젝트 실시간 동작 확인
 
