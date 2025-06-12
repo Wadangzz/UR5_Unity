@@ -133,15 +133,24 @@ class SE3:
 
         return T
     
-    def j_inv(self,j_b):
+    # def j_inv(self,j_b):
+    #     """
+    #     Compute pseudoinverse of the jacobian matrix.
+    #     :param j_b : Body Jacobian (6xN matrix)
+    #     :return : Pseudoinverse of the jacobian matrix.
+    #     """
+    #     # return np.linalg.inv(j_b.T @ j_b) @ j_b.T # Moore-Penrose 의사역행렬 (tall)
+    #     return np.linalg.pinv(j_b) # 특이값 분해 기반 의사역행렬, square이면 그냥 역행렬
+    def j_inv(self, J, damping=0.005):
         """
-        Compute pseudoinverse of the jacobian matrix.
-        :param j_b : Body Jacobian (6xN matrix)
-        :return : Pseudoinverse of the jacobian matrix.
+        Damped pseudoinverse of Jacobian using SVD-based method.
+        :param J: Jacobian matrix
+        :param damping: small constant to avoid singularity (λ)
         """
-        # return np.linalg.inv(j_b.T @ j_b) @ j_b.T # Moore-Penrose 의사역행렬 (tall)
-        return np.linalg.pinv(j_b) # 특이값 분해 기반 의사역행렬, square이면 그냥 역행렬
-    
+        U, S, Vt = np.linalg.svd(J)
+        S_damped = np.diag([s / (s**2 + damping**2) for s in S])
+        return Vt.T @ S_damped @ U.T
+        
     # def matlogm(self, T):
     #     """
     #     Compute the relative twist 
@@ -270,7 +279,7 @@ def theta_normalize(value,joint):
                 theta[i] = theta[i] % 360 - 360
             else:
                 theta[i] = theta[i] % 360
-    
+                
     return theta
 
 
@@ -339,11 +348,19 @@ def quintic_time_scaling(t, T):
 
 #         # Jacobian
 #         J_b = se3.body_jacobian(M, matexps_b, matexps_s, S)
-#         J_pseudo = se3.j_inv(J_b)
+        
+        
+#         # 특이점 감지 및 감쇠 적용
+#         sigma_min = np.min(np.linalg.svd(J_b, compute_uv=False))
+#         if sigma_min < 1e-3:
+#             print(f"특이점 근접: σ_min={sigma_min:.5f}, damping 적용")
+#             J_pseudo = se3.j_inv(J_b, damping=0.05)  
+#         else:
+#             J_pseudo = se3.j_inv(J_b)
 
 #         # Update joint angle (in rad)
 #         theta = deg2rad(init, robot.joints)
-#         thetak = theta.reshape(L, 1) + J_pseudo @ V_bd.reshape(6, 1)
+#         thetak = theta.reshape(L, 1) + J_pseudo @ V_bd.reshape(L, 1) + np.random.normal(0,0.0001,L).reshape(L,1)
 #         thetak = rad2deg(thetak, robot.joints)
 #         init = theta_normalize(thetak, robot.joints)
 
@@ -409,7 +426,7 @@ def interpolate_SE3_quat(T0, Td, T, N):
     return trajectory
 
 
-def task_trajectory(start, end, times=1.0, samples=100):
+def task_trajectory(robot, start, end, times=1.0, samples=100):
     """
     Generates a smooth trajectory in task space (SE(3)) between two poses.
     
@@ -428,15 +445,34 @@ def task_trajectory(start, end, times=1.0, samples=100):
         - Returns a sequence of transformation matrices for the entire trajectory
     """
     se3=SE3()
+    M = robot.zero
+    B = robot.B_tw
+    L = len(robot.joints)
+
     theta_start = np.array(start)
     theta_end = np.array(end)
 
     Td = se3.pose_to_SE3(theta_end)
-    print(Td)
     T0 = se3.pose_to_SE3(theta_start)
-    print(T0)
 
     return interpolate_SE3_quat(T0, Td, times, samples)
+    # theta,_ = IK(robot,start,end)
+    # print(Td)
+    # print(theta)
+
+    # if np.abs(theta[1]) > 90 :
+    #     print("elbow down")
+    #     phi = sum(theta[1:4])
+    #     k_1 = robot.links[2]+robot.links[4]*np.cos(np.deg2rad(theta[2]))
+    #     k_2 = -robot.links[4]*np.sin(np.deg2rad(theta[2]))
+        
+    #     theta[2] = -theta[2]
+    #     theta[1] = (theta[1]-np.rad2deg(2*np.arctan2(k_2,k_1))).item()
+    #     theta[3] = phi-(theta[1]+theta[2])
+    #     print(theta)
+    #     matexps_b = [se3.matexp(theta[i], B[i], joint=robot.joints[i].type) for i in range(L)]
+    #     Td = se3.matFK(M,matexps_b)
+    #     print(Td)
     # _,screw,theta= se3.matlogm(np.linalg.inv(T_0) @ T_d)
 
     # T = times
@@ -498,9 +534,9 @@ def joint_trajectory(start, end, times=1.0, samples=100):
         theta_desired = theta_start + s*d_theta
         theta_dot = s_dot*(d_theta)
         theta_ddot = s_ddot*(d_theta)
-        trajectory.append(theta_desired)
-        velocity.append(theta_dot)
-        acceleration.append(theta_ddot)
+        trajectory.append(theta_desired.tolist())
+        velocity.append(theta_dot.tolist())
+        acceleration.append(theta_ddot.tolist())
     
     return d_theta, trajectory
 
@@ -513,13 +549,14 @@ def IK(robot,init,desired):
     L = len(robot.joints)
 
     T_d = se3.pose_to_SE3(desired)
-    threshold = 1e-6 # 오차 범위
+    threshold = 1e-2 # 오차 범위
     count = 0
         
     while True:
 
         matexps_b = []
         matexps_s = []
+
 
         count += 1 # 연산 횟수 증가
 
@@ -541,12 +578,20 @@ def IK(robot,init,desired):
 
         T_bd = np.dot(np.linalg.inv(T_sb),T_d) # Relative Trasformation Matrix
         J_b = se3.body_jacobian(M,matexps_b,matexps_s,S) # Body Jacobian
-        J_pseudo = se3.j_inv(J_b) # Jacobian의 역행렬 (또는 의사역행렬)
+        
+        # 특이점 감지 및 감쇠 적용
+        sigma_min = np.min(np.linalg.svd(J_b, compute_uv=False))
+        if sigma_min < 1e-2:
+            print(f"특이점 근접: σ_min={sigma_min:.5f}, damping 적용")
+            J_pseudo = se3.j_inv(J_b, damping=0.1)  
+        else:
+            J_pseudo = se3.j_inv(J_b)
+
         V_bd,_,_ = se3.matlogm(T_bd) # Ralative Twist, 각도 오차
 
         theta = deg2rad(init,robot.joints)
 
-        thetak = theta.reshape(L,1) + J_pseudo @ V_bd.reshape(6,1) # Newton Raphson Method
+        thetak = theta.reshape(L,1) + J_pseudo @ V_bd.reshape(L,1)
         thetak = rad2deg(thetak,robot.joints)
 
         # 각도 정규화 후 갱신 (-180~180)
@@ -554,12 +599,12 @@ def IK(robot,init,desired):
         # print(init)
 
         if np.all(np.abs(pos_err) < threshold): # 오차가 임계값 이내면 break
-            print(estimated)
-            print(f"연산 횟수 : {count}, Joint Value : {init}")
+            # print(estimated)
+            # print(f"연산 횟수 : {count}, Joint Value : {init}")
             break
-        if count >= 100:
-            print(estimated)
-            print(f"연산 횟수 : {count}, Joint Value : {init}")
+        if count >= 50:
+            # print(estimated)
+            # print(f"연산 횟수 : {count}, Joint Value : {init}")
             break
 
-    return init
+    return init, count

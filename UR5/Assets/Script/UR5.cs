@@ -33,29 +33,6 @@ public class UR5 : MonoBehaviour
     {
         public float[] joints;
         public float[] position;
-        public float[] rotation;
-    }
-
-    public static class RotationUtils
-    {
-        public static Vector3 WorldEulerZYX(Transform t)
-        {
-            // 월드 기준 회전 쿼터니언
-            Quaternion worldRot = t.rotation;
-
-            // 쿼터니언을 오일러 각도로 변환 (Unity는 ZYX 기준)
-            Vector3 euler = worldRot.eulerAngles;
-
-            // 오일러 각도 정규화 (-180 ~ 180 범위)
-            for (int i = 0; i < 3; i++)
-            {
-                if (euler[i] > 180f)
-                    euler[i] -= 360f;
-            }
-
-            // 결과: (Roll, Pitch, Yaw)
-            return euler;
-        }
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
@@ -102,7 +79,6 @@ public class UR5 : MonoBehaviour
                 receiveThread.Join(); // 수신 스레드 종료되면 다시 연결 대기
                 Debug.LogWarning("[SERVER] Client disconnected. Restarting accept loop...");
 
-                // 정리
                 reader?.Close();
                 writer?.Close();
                 client?.Close();
@@ -125,8 +101,7 @@ public class UR5 : MonoBehaviour
                 RobotState state = new RobotState
                 {
                     joints = jointAngles,
-                    position = pos,
-                    rotation = endEffector
+                    position = pos
                 };
                 string msg = JsonUtility.ToJson(state);
                 writer.WriteLine(msg);
@@ -185,27 +160,11 @@ public class UR5 : MonoBehaviour
         ur5[5].transform.localRotation = Quaternion.Euler(0, -jointAngles[4], 0);
         ur5[6].transform.localRotation = Quaternion.Euler(-jointAngles[5], 0, 0);
 
-        Vector3 endEuler = RotationUtils.WorldEulerZYX(end.transform);
 
         pos = new float[3] { ur5[6].transform.position[0], ur5[6].transform.position[2], ur5[6].transform.position[1] };
-        endEffector = new float[3] { endEuler.x, endEuler.y, endEuler.z };
-        //endEff = new float[3] { end.transform.eulerAngles[0], end.transform.eulerAngles[2], end.transform.eulerAngles[1] };
 
-
-        //for (int i = 0; i < 3; i++)
-        //{
-        //    if (endEffector[i] > 1e-3)
-        //    {
-        //        endEffector[i] = 360.0f - endEffector[i];
-        //    }
-        //    else
-        //    {
-        //        continue;
-        //    }
-        //}
-
-        Debug.Log($"End-Effector : {string.Join(", ", pos)}, {String.Join(", ", endEffector)}");
-        Debug.Log($"Jointangles : {String.Join(", ", jointAngles)}");
+        Debug.Log($"End-Effector : {string.Join(", ", pos)}");
+        Debug.Log($"JointAngles : {String.Join(", ", jointAngles)}");
     }
     void OnApplicationQuit()
     {
@@ -215,76 +174,3 @@ public class UR5 : MonoBehaviour
         try { receiveThread?.Interrupt(); } catch { }
     }
 }
-
-
-//private void Send_ReceiveData()
-//{
-//    try
-//    {
-//        tcpListener = new TcpListener(IPAddress.Any,5000);
-//        tcpListener.Start();
-//        Debug.Log("Waiting for Python client...");
-
-//        while (!isConnected)
-//        {
-//            isConnecting = true;
-//            using (client = tcpListener.AcceptTcpClient())
-//            using (reader = new StreamReader(client.GetStream(), Encoding.UTF8))
-//            using (writer = new StreamWriter(client.GetStream(), Encoding.UTF8) { AutoFlush = true })
-//            {
-//                Debug.Log("Python connected.");
-//                isConnected = true;
-//                isConnecting = false;
-//                while (isConnected)
-//                {
-//                    if (!sentOnce)
-//                    {
-//                        writer.WriteLine("[0,0,0,0,0,0]");
-//                        sentOnce = true;
-//                    }
-//                    else
-//                    {
-//                        // JSON으로 현재 각도 전송
-//                        string response = "[" + string.Join(",", jointAngles) + "]";
-//                        writer.WriteLine(response);
-//                    }
-
-//                   Thread.Sleep(50);
-//                    string json = reader.ReadLine();
-//                    if (!string.IsNullOrEmpty(json))
-//                    {
-//                        float[] angles = JsonToFloatArray(json);
-//                        if (angles.Length == currentAngles.Length)
-//                        {
-//                            lock (currentAngles)
-//                            {
-//                                Array.Copy(angles, currentAngles, angles.Length);
-//                            }
-//                        }
-//                        //Debug.Log("Received angles: " + string.Join(", ", angles));
-//                    }
-//                    else
-//                    {
-//                        Debug.LogWarning(" Python disconnected (ReadLine returned null)");
-//                        isConnected = false;
-//                        break;  // 내부 루프 탈출 → 재연결 시도 가능
-//                    } 
-//                }
-//            }
-//        }
-//    }
-//    catch (Exception e)
-//    {
-//        Debug.LogError("Connection failed: " + e.Message);
-//        try
-//        {
-//            Thread.Sleep(1000);
-//        }
-//        catch (ThreadInterruptedException)
-//        {
-//            Debug.Log("Receive thread interrupted during sleep. Exiting thread...");
-//            return; // 스레드 안전 종료
-//        }
-//    }    
-//}
-

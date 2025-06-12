@@ -509,9 +509,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   moveSpeed: 1000
-  rotationSpeed: 1
+  rotationSpeed: 10
   zoomSpeed: 15
-  panSpeed: 30
+  panSpeed: 50
 --- !u!1 &386858859
 GameObject:
   m_ObjectHideFlags: 0

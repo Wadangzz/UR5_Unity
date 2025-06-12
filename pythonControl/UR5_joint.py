@@ -47,9 +47,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         for i, comp in enumerate(coodinate):
             desired.append(float(input(f"{comp} : ")))
 
-        end = math.IK(ur5,init,desired)
+        end,_ = math.IK(ur5,init,desired)
 
-        if np.abs(end[1]) > 95:
+        if np.abs(end[1]) > 90:
             phi = sum(end[1:4])
             k_1 = ur5.links[2]+ur5.links[4]*np.cos(np.deg2rad(end[2]))
             k_2 = -ur5.links[4]*np.sin(np.deg2rad(end[2]))
@@ -67,7 +67,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
         for angles in trajectory:
             # JSON 직렬화
-            data = json.dumps(angles.tolist()).encode('utf-8')
+            data = json.dumps(angles).encode('utf-8')
             s.sendall(data + b'\n')  # 한 줄 단위로 구분
             time.sleep(0.001) 
 

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>692</width>
-    <height>392</height>
+    <width>775</width>
+    <height>410</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -101,11 +101,26 @@
    <widget class="QSlider" name="slider_X">
     <property name="geometry">
      <rect>
-      <x>359</x>
-      <y>115</y>
+      <x>444</x>
+      <y>131</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-500</number>
+    </property>
+    <property name="maximum">
+     <number>500</number>
+    </property>
+    <property name="singleStep">
+     <number>1</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
+    </property>
+    <property name="tracking">
+     <bool>false</bool>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -114,11 +129,20 @@
    <widget class="QSlider" name="slider_Y">
     <property name="geometry">
      <rect>
-      <x>359</x>
-      <y>155</y>
+      <x>444</x>
+      <y>170</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-500</number>
+    </property>
+    <property name="maximum">
+     <number>500</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -127,11 +151,20 @@
    <widget class="QSlider" name="slider_Z">
     <property name="geometry">
      <rect>
-      <x>359</x>
-      <y>195</y>
+      <x>444</x>
+      <y>210</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-500</number>
+    </property>
+    <property name="maximum">
+     <number>500</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -140,11 +173,20 @@
    <widget class="QSlider" name="slider_RX">
     <property name="geometry">
      <rect>
-      <x>359</x>
-      <y>235</y>
+      <x>444</x>
+      <y>250</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-180</number>
+    </property>
+    <property name="maximum">
+     <number>180</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -153,11 +195,20 @@
    <widget class="QSlider" name="slider_RY">
     <property name="geometry">
      <rect>
-      <x>359</x>
-      <y>275</y>
+      <x>444</x>
+      <y>290</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-180</number>
+    </property>
+    <property name="maximum">
+     <number>180</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -166,11 +217,20 @@
    <widget class="QSlider" name="slider_RZ">
     <property name="geometry">
      <rect>
-      <x>359</x>
-      <y>315</y>
+      <x>444</x>
+      <y>330</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-180</number>
+    </property>
+    <property name="maximum">
+     <number>180</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -179,11 +239,20 @@
    <widget class="QSlider" name="slider_J5">
     <property name="geometry">
      <rect>
-      <x>559</x>
-      <y>275</y>
+      <x>649</x>
+      <y>290</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-180</number>
+    </property>
+    <property name="maximum">
+     <number>180</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -192,11 +261,20 @@
    <widget class="QSlider" name="slider_J2">
     <property name="geometry">
      <rect>
-      <x>559</x>
-      <y>155</y>
+      <x>649</x>
+      <y>170</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-90</number>
+    </property>
+    <property name="maximum">
+     <number>90</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -205,11 +283,20 @@
    <widget class="QSlider" name="slider_J4">
     <property name="geometry">
      <rect>
-      <x>559</x>
-      <y>235</y>
+      <x>649</x>
+      <y>250</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-170</number>
+    </property>
+    <property name="maximum">
+     <number>170</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -218,11 +305,20 @@
    <widget class="QSlider" name="slider_J1">
     <property name="geometry">
      <rect>
-      <x>559</x>
-      <y>115</y>
+      <x>649</x>
+      <y>131</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-180</number>
+    </property>
+    <property name="maximum">
+     <number>180</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -231,11 +327,20 @@
    <widget class="QSlider" name="slider_J3">
     <property name="geometry">
      <rect>
-      <x>559</x>
-      <y>195</y>
+      <x>649</x>
+      <y>210</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-170</number>
+    </property>
+    <property name="maximum">
+     <number>170</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -244,11 +349,20 @@
    <widget class="QSlider" name="slider_J6">
     <property name="geometry">
      <rect>
-      <x>559</x>
-      <y>315</y>
+      <x>649</x>
+      <y>330</y>
       <width>111</width>
       <height>22</height>
      </rect>
+    </property>
+    <property name="minimum">
+     <number>-180</number>
+    </property>
+    <property name="maximum">
+     <number>180</number>
+    </property>
+    <property name="pageStep">
+     <number>50</number>
     </property>
     <property name="orientation">
      <enum>Qt::Horizontal</enum>
@@ -257,23 +371,66 @@
    <widget class="QComboBox" name="comboBox_Robot">
     <property name="geometry">
      <rect>
-      <x>390</x>
-      <y>40</y>
-      <width>111</width>
+      <x>557</x>
+      <y>39</y>
+      <width>41</width>
       <height>21</height>
      </rect>
     </property>
+    <property name="layoutDirection">
+     <enum>Qt::LeftToRight</enum>
+    </property>
     <item>
      <property name="text">
-      <string>UR5</string>
+      <string>1</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>2</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>3</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>4</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>5</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>6</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>7</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>8</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>9</string>
      </property>
     </item>
    </widget>
    <widget class="QPushButton" name="pB_Queuepos">
     <property name="geometry">
      <rect>
-      <x>560</x>
-      <y>35</y>
+      <x>631</x>
+      <y>34</y>
       <width>111</width>
       <height>31</height>
      </rect>
@@ -282,11 +439,11 @@
      <string>위치 저장</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label">
+   <widget class="QLabel" name="label_X">
     <property name="geometry">
      <rect>
-      <x>298</x>
-      <y>120</y>
+      <x>380</x>
+      <y>136</y>
       <width>16</width>
       <height>12</height>
      </rect>
@@ -295,11 +452,11 @@
      <string>X :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_2">
+   <widget class="QLabel" name="label_Y">
     <property name="geometry">
      <rect>
-      <x>298</x>
-      <y>160</y>
+      <x>380</x>
+      <y>175</y>
       <width>16</width>
       <height>12</height>
      </rect>
@@ -308,11 +465,11 @@
      <string>Y :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_3">
+   <widget class="QLabel" name="label_Z">
     <property name="geometry">
      <rect>
-      <x>298</x>
-      <y>200</y>
+      <x>380</x>
+      <y>215</y>
       <width>16</width>
       <height>12</height>
      </rect>
@@ -321,11 +478,11 @@
      <string>Z :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_4">
+   <widget class="QLabel" name="label_RZ">
     <property name="geometry">
      <rect>
-      <x>290</x>
-      <y>320</y>
+      <x>372</x>
+      <y>335</y>
       <width>24</width>
       <height>12</height>
      </rect>
@@ -334,11 +491,11 @@
      <string>RZ :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_5">
+   <widget class="QLabel" name="label_RY">
     <property name="geometry">
      <rect>
-      <x>290</x>
-      <y>280</y>
+      <x>372</x>
+      <y>295</y>
       <width>24</width>
       <height>12</height>
      </rect>
@@ -347,11 +504,11 @@
      <string>RY :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_6">
+   <widget class="QLabel" name="label_RX">
     <property name="geometry">
      <rect>
-      <x>290</x>
-      <y>240</y>
+      <x>372</x>
+      <y>255</y>
       <width>24</width>
       <height>12</height>
      </rect>
@@ -360,11 +517,11 @@
      <string>RX :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_7">
+   <widget class="QLabel" name="label_J3">
     <property name="geometry">
      <rect>
-      <x>491</x>
-      <y>196</y>
+      <x>581</x>
+      <y>211</y>
       <width>21</width>
       <height>20</height>
      </rect>
@@ -373,11 +530,11 @@
      <string>J3 :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_8">
+   <widget class="QLabel" name="label_J4">
     <property name="geometry">
      <rect>
-      <x>490</x>
-      <y>240</y>
+      <x>580</x>
+      <y>255</y>
       <width>24</width>
       <height>12</height>
      </rect>
@@ -386,11 +543,11 @@
      <string>J4 :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_9">
+   <widget class="QLabel" name="label_J2">
     <property name="geometry">
      <rect>
-      <x>491</x>
-      <y>156</y>
+      <x>581</x>
+      <y>171</y>
       <width>21</width>
       <height>20</height>
      </rect>
@@ -399,11 +556,11 @@
      <string>J2 :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_10">
+   <widget class="QLabel" name="label_J1">
     <property name="geometry">
      <rect>
-      <x>491</x>
-      <y>115</y>
+      <x>581</x>
+      <y>131</y>
       <width>21</width>
       <height>20</height>
      </rect>
@@ -412,11 +569,11 @@
      <string>J1 :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_11">
+   <widget class="QLabel" name="label_J5">
     <property name="geometry">
      <rect>
-      <x>490</x>
-      <y>280</y>
+      <x>580</x>
+      <y>295</y>
       <width>24</width>
       <height>12</height>
      </rect>
@@ -425,11 +582,11 @@
      <string>J5 :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_12">
+   <widget class="QLabel" name="label_J6">
     <property name="geometry">
      <rect>
-      <x>490</x>
-      <y>320</y>
+      <x>580</x>
+      <y>335</y>
       <width>24</width>
       <height>12</height>
      </rect>
@@ -438,173 +595,327 @@
      <string>J6 :</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_13">
+   <widget class="QLabel" name="label_program">
     <property name="geometry">
      <rect>
-      <x>298</x>
-      <y>46</y>
-      <width>60</width>
-      <height>12</height>
+      <x>466</x>
+      <y>43</y>
+      <width>81</width>
+      <height>16</height>
      </rect>
     </property>
     <property name="text">
-     <string>Robot 선택</string>
+     <string>프로그램 선택</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_14">
+   <widget class="QLabel" name="label_3">
     <property name="geometry">
      <rect>
-      <x>340</x>
-      <y>200</y>
-      <width>6</width>
+      <x>407</x>
+      <y>215</y>
+      <width>30</width>
       <height>12</height>
      </rect>
     </property>
-    <property name="text">
-     <string>0</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_15">
-    <property name="geometry">
-     <rect>
-      <x>340</x>
-      <y>240</y>
-      <width>6</width>
-      <height>12</height>
-     </rect>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
     </property>
     <property name="text">
      <string>0</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_16">
+   <widget class="QLabel" name="label_4">
     <property name="geometry">
      <rect>
-      <x>340</x>
-      <y>160</y>
-      <width>6</width>
+      <x>407</x>
+      <y>255</y>
+      <width>30</width>
       <height>12</height>
      </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
     </property>
     <property name="text">
      <string>0</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_17">
+   <widget class="QLabel" name="label_2">
     <property name="geometry">
      <rect>
-      <x>340</x>
+      <x>407</x>
+      <y>175</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_1">
+    <property name="geometry">
+     <rect>
+      <x>407</x>
+      <y>136</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_6">
+    <property name="geometry">
+     <rect>
+      <x>407</x>
+      <y>335</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_5">
+    <property name="geometry">
+     <rect>
+      <x>407</x>
+      <y>295</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_9">
+    <property name="geometry">
+     <rect>
+      <x>613</x>
+      <y>215</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_12">
+    <property name="geometry">
+     <rect>
+      <x>613</x>
+      <y>335</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_11">
+    <property name="geometry">
+     <rect>
+      <x>613</x>
+      <y>295</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_8">
+    <property name="geometry">
+     <rect>
+      <x>613</x>
+      <y>175</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_7">
+    <property name="enabled">
+     <bool>true</bool>
+    </property>
+    <property name="geometry">
+     <rect>
+      <x>613</x>
+      <y>135</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_10">
+    <property name="geometry">
+     <rect>
+      <x>613</x>
+      <y>255</y>
+      <width>30</width>
+      <height>12</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>0</string>
+    </property>
+   </widget>
+   <widget class="QTableWidget" name="tableWidget">
+    <property name="geometry">
+     <rect>
+      <x>15</x>
       <y>120</y>
-      <width>6</width>
-      <height>12</height>
+      <width>331</width>
+      <height>241</height>
      </rect>
     </property>
-    <property name="text">
-     <string>0</string>
-    </property>
+    <attribute name="horizontalHeaderCascadingSectionResizes">
+     <bool>true</bool>
+    </attribute>
+    <attribute name="horizontalHeaderDefaultSectionSize">
+     <number>49</number>
+    </attribute>
+    <attribute name="verticalHeaderCascadingSectionResizes">
+     <bool>true</bool>
+    </attribute>
+    <row>
+     <property name="text">
+      <string>1</string>
+     </property>
+    </row>
+    <row>
+     <property name="text">
+      <string>2</string>
+     </property>
+    </row>
+    <row>
+     <property name="text">
+      <string>3</string>
+     </property>
+    </row>
+    <row>
+     <property name="text">
+      <string>4</string>
+     </property>
+    </row>
+    <row>
+     <property name="text">
+      <string>5</string>
+     </property>
+    </row>
+    <row>
+     <property name="text">
+      <string>6</string>
+     </property>
+    </row>
+    <row>
+     <property name="text">
+      <string>7</string>
+     </property>
+    </row>
+    <row>
+     <property name="text">
+      <string>8</string>
+     </property>
+    </row>
+    <column>
+     <property name="text">
+      <string>X</string>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>Y</string>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>Z</string>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>RX</string>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>RY</string>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>RZ</string>
+     </property>
+    </column>
    </widget>
-   <widget class="QLabel" name="label_18">
+   <widget class="QPushButton" name="pB_Start">
     <property name="geometry">
      <rect>
-      <x>340</x>
-      <y>320</y>
-      <width>6</width>
-      <height>12</height>
+      <x>490</x>
+      <y>70</y>
+      <width>111</width>
+      <height>31</height>
      </rect>
     </property>
     <property name="text">
-     <string>0</string>
+     <string>실행</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_19">
+   <widget class="QPushButton" name="pB_Reset">
     <property name="geometry">
      <rect>
-      <x>340</x>
-      <y>280</y>
-      <width>6</width>
-      <height>12</height>
+      <x>631</x>
+      <y>70</y>
+      <width>111</width>
+      <height>31</height>
      </rect>
     </property>
     <property name="text">
-     <string>0</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_20">
-    <property name="geometry">
-     <rect>
-      <x>540</x>
-      <y>200</y>
-      <width>6</width>
-      <height>12</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>0</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_21">
-    <property name="geometry">
-     <rect>
-      <x>540</x>
-      <y>320</y>
-      <width>6</width>
-      <height>12</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>0</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_22">
-    <property name="geometry">
-     <rect>
-      <x>540</x>
-      <y>280</y>
-      <width>6</width>
-      <height>12</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>0</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_23">
-    <property name="geometry">
-     <rect>
-      <x>540</x>
-      <y>160</y>
-      <width>6</width>
-      <height>12</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>0</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_24">
-    <property name="geometry">
-     <rect>
-      <x>540</x>
-      <y>120</y>
-      <width>6</width>
-      <height>12</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>0</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_25">
-    <property name="geometry">
-     <rect>
-      <x>540</x>
-      <y>240</y>
-      <width>6</width>
-      <height>12</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>0</string>
+     <string>Reset</string>
     </property>
    </widget>
   </widget>
@@ -613,7 +924,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>692</width>
+     <width>775</width>
      <height>21</height>
     </rect>
    </property>
