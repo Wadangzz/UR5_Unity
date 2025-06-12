@@ -23,7 +23,7 @@ Python에서 생성한 trajectory를 JSON 형식으로 전송하면, Unity에서
 ## 🛠️ 실행 환경
 
 * Python 3.9
-* `numpy`, `scipy`, `matplotlib`, `pyqt5'
+* `numpy`, `scipy`, `matplotlib`, `pyqt5`
 
 ```bash
 pip install numpy scipy matplotlib pyqt pyqt5-tools
