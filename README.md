@@ -50,10 +50,10 @@ UR5 오브젝트 실시간 동작 확인
 
 ## 📌 추가 예정
 
-qt GUI 종료해도 저장한 경로 값 초기화 되지 않도록 SQLite DB파일로 trajectory 데이터 저장
-query로 trajectory 불러와서 반영하도록 개선해야 함(IK를 매번 연산하면 CPU 과부하 발생)
-Reset 버튼 추가해서 프로그램 리셋 기능 구현 예정
-pyinstaller로 최종 exe 파일 Build
+qt GUI 종료해도 저장한 경로 값 초기화 되지 않도록 SQLite DB파일로 trajectory 데이터 저장   
+query로 trajectory 불러와서 반영하도록 개선해야 함(IK를 매번 연산하면 CPU 과부하 발생)   
+Reset 버튼 추가해서 프로그램 리셋 기능 구현 예정   
+pyinstaller로 최종 exe 파일 Build   
 
 ---
 
