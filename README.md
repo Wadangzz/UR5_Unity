@@ -1,12 +1,13 @@
 ⁹# UR5_Unity
 <p align="center">
-  <img src="UR5.gif" width="30%">
-  <img src="UR5_2.gif" width="30%">
-  <img src="UR5_3.gif" width="30%">
-</p>
+  <img src="tutorial.gif" width="30%">
+
+</p>  
 
 **Numerical IK로 생성한 UR5 로봇의 Trajectory를  Unity에서 실시간 시각화**하는 프로젝트입니다.  
 Python에서 생성한 trajectory를 JSON 형식으로 전송하면, Unity에서 해당 데이터를 수신하여 UR5 3D 모델이 움직입니다.
+[**Youtube link**](https://www.youtube.com/watch?v=LGrTMQCBbGc)
+
 
 ---
 
