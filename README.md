@@ -1,4 +1,4 @@
-# UR5_Unity
+⁹# UR5_Unity
 <p align="center">
   <img src="UR5.gif" width="30%">
   <img src="UR5_2.gif" width="30%">
@@ -36,22 +36,23 @@ pip install numpy scipy matplotlib
 ```
 ---
 
-🚀 실행 방법
-UR5_RUN 폴더 내에 Unity Bulid UR5 실행
+## 🚀 실행 방법
+UR5_RUN 폴더 내에 Unity Bulid UR5 실행   
+python 실행 전 까지 TCP listen 대기
 
-Python ur5_joint.py 실행
+pythonControl 폴더 내 ur5_joint.py 실행
 x, y, z, Rx, Ry, Rz 입력하여 trajectory 생성 후
 UR5 오브젝트 실시간 동작 확인
 
---
+---
 
-📌 주의사항
+## 📌 주의사항
 현재는 Joint Space 기반 trajectory만 지원됩니다.
 
 
 Task Space trajectory 및 특이점 회피, 충돌 회피 
-Joint angle Limit 설정 등은 추후 업데이트 예정입니다.   
-QT GUI 또는 Unity 캔버스 GUI 추후 추가 예정
+Joint angle Limit 설정 외 기타 예외 처리는 추후 업데이트 예정입니다.   
+QT GUI 또는 Unity 캔버스 GUI 추가 예정
 
 ---
 
