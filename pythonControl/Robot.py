@@ -6,17 +6,6 @@ from scipy.spatial.transform import Rotation as R
 
 se3 = SE3()
 
-# def select_init(desired, preset): # 목표 좌표에 해당하는 사분면 초기 상태 호출
-#     x, y = desired[0], desired[1]
-#     key = (x > 0, y > 0)
-#     mapping = {
-#         (True,   True): 0,
-#         (False,  True): 1,
-#         (False, False): 2,
-#         (True,  False): 3,
-#     }
-#     return preset[mapping[key]]
-
 @dataclass
 class JointSpec:
     type: str  # 'R' or 'P'
@@ -145,22 +134,6 @@ class BarretWAM:
             JointSpec('R', 'z', 'z')
         ]
 
-        self.links = [
-            RobotLink(0, self.joints[0], color='c', parent=self),
-            RobotLink(L1, self.joints[1], color='c', parent=self), # L1 링크
-            RobotLink(0, self.joints[2], color='c', parent=self),  
-            RobotLink(W, JointSpec('R','y','x'), color='c', parent=self), 
-            RobotLink(-W, JointSpec('R','y','x'), color='y', parent=self),
-            RobotLink(L2, self.joints[3], color='y', parent=self),    
-            RobotLink(0, self.joints[4], color='k', parent=self),
-            RobotLink(L3, self.joints[5], color='k', parent=self), 
-            RobotLink(0, self.joints[6], color='g', parent=self),
-            RobotLink(4, JointSpec('R', 'z', 'x'), color='r', parent=self),
-            RobotLink(4, JointSpec('R', 'z', 'y'), color='b', parent=self),
-            RobotLink(4, JointSpec('R', 'z', 'z'), color='g', parent=self),
-            RobotLink(4, JointSpec('R', 'z', 'x'), color='r', parent=self), # J1 회전 시각화
-            RobotLink(4, JointSpec('R', 'z', 'x'), color='b', parent=self) # J3 회전 시각화
-        ]
         self.zero = np.array([[1, 0, 0, 0],
                               [0, 1, 0, 0],
                               [0, 0, 1, L1+L2+L3],
@@ -176,48 +149,6 @@ class BarretWAM:
 
         self.S_tw = (se3.adjoint(self.zero) @ np.array(self.B_tw).T).T.tolist()
 
-    def update_angles(self, angles):
-        current_point = np.array([0, 0, 0])
-        
-        self.links[12].update_position(current_point, angle=np.deg2rad([angles[0],0,0]))
-        self.links[13].update_position(current_point, angle=np.deg2rad([angles[2],0,0]))
-
-        self.links[1].update_position(current_point, angle=np.deg2rad([angles[0]+angles[2],
-                                                                       angles[1],0])) # L1 링크 회전
-        current_point = self.links[1].end_point
-        
-        self.links[3].update_position(current_point, angle=np.deg2rad([angles[0]+angles[2],
-                                                                       angles[1],
-                                                                       0])) # L1 + W 링크 회전
-        current_point = self.links[3].end_point
-
-        self.links[4].update_position(current_point, angle=np.deg2rad([angles[0]+angles[2],
-                                                                       angles[1]+angles[3],
-                                                                       0])) # -W 링크 회전
-        current_point = self.links[4].end_point
-
-        self.links[5].update_position(current_point, angle=np.deg2rad([angles[0]+angles[2],
-                                                                       angles[1]+angles[3],
-                                                                       0])) # -W + L2 링크 회전
-        current_point = self.links[5].end_point
-
-
-        self.links[7].update_position(current_point, angle=np.deg2rad([angles[0]+angles[2]+angles[4]+angles[6],
-                                                                       angles[1]+angles[3]+angles[5], 
-                                                                       0])) # L3 링크 회전
-        current_point = self.links[7].end_point
-        
-        # End-Effector 표시
-
-        self.links[9].update_position(current_point, angle=np.deg2rad([angles[0]+angles[2]+angles[4]+angles[6],
-                                                                       angles[1]+angles[3]+angles[5],
-                                                                       0]))
-        self.links[10].update_position(current_point, angle=np.deg2rad([angles[0]+angles[2]+angles[4]+angles[6],
-                                                                       angles[1]+angles[3]+angles[5],
-                                                                       0]))
-        self.links[11].update_position(current_point, angle=np.deg2rad([angles[0]+angles[2]+angles[4]+angles[6],
-                                                                       angles[1]+angles[3]+angles[5],
-                                                                       0]))
 class UR5:
 
     def __init__(self,L1=89.2,L2=135.85,L3=425,L4=119.7,L5=392.25,L6=93,L7=94.65,L8=82.3):

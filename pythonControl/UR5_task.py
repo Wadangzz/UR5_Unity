@@ -58,8 +58,7 @@ def trajectory(init,initpos,desired,N):
         current = theta
         
     if impos_task:
-    
-        print('관절 공간 경로')
+        
         end,_ = math.IK(ur5,init,desired)
 
         if np.abs(end[1]) > 90: # elbow down 자세 바닥에 밖히는거 방지

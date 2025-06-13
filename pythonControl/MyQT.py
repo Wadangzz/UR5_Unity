@@ -13,7 +13,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
-        MainWindow.setObjectName("MainWindow")
+        MainWindow.setObjectName("UR5 Control")
         MainWindow.resize(775, 410)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
@@ -127,8 +127,8 @@ class Ui_MainWindow(object):
         self.slider_J6.setOrientation(QtCore.Qt.Horizontal)
         self.slider_J6.setObjectName("slider_J6")
         self.slider_Speed = QtWidgets.QSlider(self.centralwidget)
-        self.slider_Speed.setGeometry(QtCore.QRect(300, 39, 111, 22))
-        self.slider_Speed.setMinimum(0)
+        self.slider_Speed.setGeometry(QtCore.QRect(330, 39, 111, 22))
+        self.slider_Speed.setMinimum(1)
         self.slider_Speed.setMaximum(10)
         self.slider_Speed.setOrientation(QtCore.Qt.Horizontal)
         self.slider_Speed.setObjectName("slider_Speed")
@@ -184,8 +184,11 @@ class Ui_MainWindow(object):
         self.label_J6 = QtWidgets.QLabel(self.centralwidget)
         self.label_J6.setGeometry(QtCore.QRect(580, 335, 24, 12))
         self.label_J6.setObjectName("label_J6")
+        self.label_Speed = QtWidgets.QLabel(self.centralwidget)
+        self.label_Speed.setGeometry(QtCore.QRect(330, 20, 80, 12))
+        self.label_Speed.setObjectName("label_Speed")
         self.label_program = QtWidgets.QLabel(self.centralwidget)
-        self.label_program.setGeometry(QtCore.QRect(466, 43, 81, 16))
+        self.label_program.setGeometry(QtCore.QRect(460, 42, 81, 16))
         self.label_program.setObjectName("label_program")
         self.label_3 = QtWidgets.QLabel(self.centralwidget)
         self.label_3.setGeometry(QtCore.QRect(400, 215, 50, 12))
@@ -236,6 +239,10 @@ class Ui_MainWindow(object):
         self.label_10.setGeometry(QtCore.QRect(605, 255, 50, 12))
         self.label_10.setLayoutDirection(QtCore.Qt.RightToLeft)
         self.label_10.setObjectName("label_10")
+        self.label_0 = QtWidgets.QLabel(self.centralwidget)
+        self.label_0.setGeometry(QtCore.QRect(400, 20, 50, 12))
+        self.label_0.setLayoutDirection(QtCore.Qt.RightToLeft)
+        self.label_0.setObjectName("label_0")
         self.tableWidget = QtWidgets.QTableWidget(self.centralwidget)
         self.tableWidget.setGeometry(QtCore.QRect(15, 120, 331, 241))
         self.tableWidget.setObjectName("tableWidget")
@@ -309,7 +316,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "UR5 Control"))
         self.label_IP.setText(_translate("MainWindow", "<html><head/><body><p align=\"right\"><span style=\" font-size:14pt; font-weight:600;\">IP Address</span></p></body></html>"))
         self.label_port.setText(_translate("MainWindow", "<html><head/><body><p align=\"right\"><span style=\" font-size:14pt; font-weight:600;\">PORT</span></p></body></html>"))
         self.pb_Conn.setText(_translate("MainWindow", "연결"))
@@ -330,6 +337,7 @@ class Ui_MainWindow(object):
         self.label_RZ.setText(_translate("MainWindow", "RZ :"))
         self.label_RY.setText(_translate("MainWindow", "RY :"))
         self.label_RX.setText(_translate("MainWindow", "RX :"))
+        self.label_Speed.setText(_translate("MainWindow", "속도 Level :"))
         self.label_J3.setText(_translate("MainWindow", "J3 :"))
         self.label_J4.setText(_translate("MainWindow", "J4 :"))
         self.label_J2.setText(_translate("MainWindow", "J2 :"))
@@ -345,6 +353,7 @@ class Ui_MainWindow(object):
         self.label_5.setText(_translate("MainWindow", "0"))
         self.label_9.setText(_translate("MainWindow", "0"))
         self.label_12.setText(_translate("MainWindow", "0"))
+        self.label_0.setText(_translate("MainWindow", "0"))
         self.label_11.setText(_translate("MainWindow", "0"))
         self.label_8.setText(_translate("MainWindow", "0"))
         self.label_7.setText(_translate("MainWindow", "0"))

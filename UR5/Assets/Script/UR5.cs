@@ -16,9 +16,8 @@ public class UR5 : MonoBehaviour
     private Thread sendThread;
     private Thread receiveThread;
     private readonly float[] currentAngles = new float[6];
-    private float[] jointAngles = new float[6] { 0, 0, 0, 0, 0, 0 };
+    private readonly float[] jointAngles = new float[6] { 0, 0, 0, 0, 0, 0 };
     private float[] pos = new float[3] { 0, 0, 0 };
-    private float[] endEffector = new float[3] { 0, 0, 0 };
 
     private bool isConnected = false;
 

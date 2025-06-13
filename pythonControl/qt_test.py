@@ -4,7 +4,7 @@ import threading
 import UR5_task
 import MyRobotMath as math
 from MyRobotMath import SE3
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox
 from MyQT import Ui_MainWindow
 
 class MyApp(QMainWindow):
@@ -26,21 +26,25 @@ class MyApp(QMainWindow):
         self.axis_sliders = {}
         self.axis_labels = {}
         for i, axis in enumerate(['X','Y','Z','RX','RY','RZ']):
-            self.axis_sliders[axis] = getattr(self.ui, f'slider_{axis}')
-            self.axis_labels[axis] = getattr(self.ui, f'label_{i+1}')
+            self.axis_sliders[axis] = getattr(self.ui, f'slider_{axis}') 
+            self.axis_labels[axis] = getattr(self.ui, f'label_{i+1}') # label_0 ~ label_6
 
         self.ui.slider_Speed.setValue(5)
 
-        self.ui.comboBox_Robot.currentIndexChanged.connect(self.on_program_changed)
-        self.ui.pB_Queuepos.clicked.connect(self.queue_current_pose)
-        self.ui.pB_Start.clicked.connect(self.run_trajectory_program)
+        self.ui.comboBox_Robot.currentIndexChanged.connect(self.on_program_changed) # 프로그램 번호 변경 드롭다운
+        self.ui.pB_Queuepos.clicked.connect(self.queue_current_pose) # 자세 저장 버튼
+        self.ui.pB_Start.clicked.connect(self.run_trajectory_program) # 프로그램 실행 버튼
+        self.ui.slider_Speed.valueChanged.connect(self.speed_level_changed)
         self.connect_joint_sliders()       
         self.connect_axis_sliders()
 
+    # 속도 레벨에 따라 샘플 수 조정 (최대 1000)
+    # 샘플 수가 적을 수록 속도가 빨라짐
     def get_speed_sample_count(self):
         level = self.ui.slider_Speed.value()
-        return max(10, level * 100)
-
+        return min(int(5000 / level), 5000) 
+    
+    # 프로그램 ID에 해당하는 테이블 업데이트
     def update_table(self, program_id):
         pose_list = self.programs_queue[program_id]
         self.ui.tableWidget.setRowCount(len(pose_list))
@@ -49,10 +53,12 @@ class MyApp(QMainWindow):
                 item = QTableWidgetItem(f"{val:.2f}")
                 self.ui.tableWidget.setItem(row, col, item)
 
+    # 프로그램 변경 시 테이블 업데이트
     def on_program_changed(self, idx):
         program_id = self.ui.comboBox_Robot.currentText()
         self.update_table(program_id)
 
+    # 현재 자세를 프로그램에 저장
     def queue_current_pose(self):
         global initpos
         if initpos is None:
@@ -64,9 +70,11 @@ class MyApp(QMainWindow):
         print(f"프로그램 {program_id} 위치 저장됨:", initpos)
         self.update_table(program_id)
 
+    # 현재 프로그램의 자세를 실행하는 함수
     def run_trajectory_program(self):
         global init, initpos
         if init is None or initpos is None:
+            QMessageBox.warning(self, "오류", "Unity 데이터가 아직 수신되지 않았습니다.")
             print("init/initpos 없음. Unity 데이터 수신 전입니다.")
             return
 
@@ -74,6 +82,7 @@ class MyApp(QMainWindow):
         pose_list = self.programs_queue.get(program_id, [])
 
         if not pose_list:
+            QMessageBox.warning(self, "오류", f"프로그램 {program_id}에 저장된 pose가 없습니다.")
             print(f"프로그램 {program_id}에 저장된 pose가 없습니다.")
             return
 
@@ -91,8 +100,9 @@ class MyApp(QMainWindow):
                 data = json.dumps(joint).encode('utf-8')
                 try:
                     self.sock.sendall(data + b'\n')
-                    time.sleep(0.001)
+                    time.sleep(0.003)
                 except Exception as e:
+                    QMessageBox.critical(self, "전송 실패", f"소켓 전송 중 오류 발생: {e}")
                     print(f"[전송 실패] {e}")
                     return
 
@@ -153,6 +163,12 @@ class MyApp(QMainWindow):
             print("자세 전송:", pose)
         except Exception as e:
             print("[소켓 전송 실패]", e)
+    
+    def speed_level_changed(self):
+        level = self.ui.slider_Speed.value()
+        self.ui.label_0.setText(f"{level}")
+        print(f"속도 레벨 변경됨: {level}")
+
 
 def receive_loop(sock):
     global init, initpos
@@ -168,7 +184,8 @@ def receive_loop(sock):
                 # print(initpos)
                 # initpos = data['position'] + data['rotation']
             except json.JSONDecodeError:
-                print("[WARN] Invalid JSON")
+                # JSON 파싱 실패 시 경고 출력
+                print("[WARN] Invalid JSON received from Unity")
 
 if __name__ == '__main__':
 
@@ -182,12 +199,10 @@ if __name__ == '__main__':
     HOST = '127.0.0.1'
     PORT = 5000
 
-    init = None
-    initpos = None
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
-        print(f"✅ Unity connected to {HOST}:{PORT}")
+        print(f"Unity connected to {HOST}:{PORT}")
 
         angle_thread = threading.Thread(target=receive_loop,args=(s,),daemon = True)
         angle_thread.start()

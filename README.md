@@ -1,6 +1,8 @@
 # UR5_Unity
 <p align="center">
   <img src="tutorial.gif" width="80%">
+  <img src="tutorial_2.gif" width="80%">
+
 
 </p>  
 
