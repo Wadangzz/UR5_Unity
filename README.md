@@ -54,7 +54,7 @@ pip install numpy scipy matplotlib pyqt pyqt5-tools
 ## 📌 수정 사항
 
 - SQLite DB 추가해서 Qt GUI 종료해도 이전 저장 값 유지
-- euler angle 해석, 동작하는 부분 quatinion으로 변경( Gimbol Lock 회피 용이 )
+- euler angle 해석, 동작하는 부분 quaternion으로 변경( Gimbol Lock 회피 용이 )
 - Reset 버튼 추가해서 프로그램 리셋 기능 구현 예정   
 - pyinstaller로 최종 exe 파일 Build(github 용량 제한......)
 
