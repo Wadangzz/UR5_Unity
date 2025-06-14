@@ -4,7 +4,6 @@ import socket
 import json
 import threading
 import time
-import visual
 import MyRobotMath as math
 
 HOST = '127.0.0.1'

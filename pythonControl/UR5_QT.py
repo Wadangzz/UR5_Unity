@@ -8,12 +8,14 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessag
 from MyQT import Ui_MainWindow
 
 class MyApp(QMainWindow):
-    def __init__(self, sock):
+    def __init__(self):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
-        self.sock = sock
+        self.sock = None
+        self.connected = False
+        self.receive_thread = None
         self.programs_queue = {str(i): [] for i in range(1, 10)}  # '1' ~ '9' 프로그램별 리스트
 
         # J1~J6 슬라이더와 라벨 딕셔너리로 정리
@@ -31,6 +33,8 @@ class MyApp(QMainWindow):
 
         self.ui.slider_Speed.setValue(5)
 
+        self.ui.pb_Conn.clicked.connect(self.connect_to_unity)
+        self.ui.pB_Disconn.clicked.connect(self.disconnect_from_unity)
         self.ui.comboBox_Robot.currentIndexChanged.connect(self.on_program_changed) # 프로그램 번호 변경 드롭다운
         self.ui.pB_Queuepos.clicked.connect(self.queue_current_pose) # 자세 저장 버튼
         self.ui.pB_Start.clicked.connect(self.run_trajectory_program) # 프로그램 실행 버튼
@@ -38,11 +42,47 @@ class MyApp(QMainWindow):
         self.connect_joint_sliders()       
         self.connect_axis_sliders()
 
+
+    def connect_to_unity(self):
+        if self.connected:
+            QMessageBox.information(self, "Alarm", "이미 연결되어 있습니다.")
+            return
+        
+        ip = self.ui.lineEdit_IP.text()
+        port = self.ui.lineEdit_PORT.text()
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((ip, int(port)))
+            self.connected = True
+            self.receive_thread = threading.Thread(target=self.receive_loop, daemon=True)
+            self.receive_thread.start()
+            QMessageBox.information(self, "연결 성공", f"Unity에 연결되었습니다: {ip}:{port}")
+            print(f"Unity connected to {ip}:{port}")
+        except Exception as e:
+            QMessageBox.critical(self, "연결 실패", f"연결 중 오류 발생: {e}")
+            self.sock = None
+            self.connected = False
+
+    def disconnect_from_unity(self):
+        if self.connected and self.sock:
+            try:
+                self.sock.close()
+                QMessageBox.information(self, "연결 해제", "Unity와의 연결이 해제되었습니다.")
+                print("Unity 연결 해제됨")
+            except Exception as e:
+                QMessageBox.warning(self, "해제 실패", f"해제 중 오류 발생: {e}")
+        else:
+            QMessageBox.information(self, "알림", "이미 연결 해제 상태입니다.")
+            print("이미 연결 해제 상태입니다.")
+        self.sock = None
+        self.connected = False
+
+
     # 속도 레벨에 따라 샘플 수 조정 (최대 1000)
     # 샘플 수가 적을 수록 속도가 빨라짐
     def get_speed_sample_count(self):
         level = self.ui.slider_Speed.value()
-        return min(int(5000 / level), 5000) 
+        return min(int(1000 / level), 1000) 
     
     # 프로그램 ID에 해당하는 테이블 업데이트
     def update_table(self, program_id):
@@ -63,7 +103,7 @@ class MyApp(QMainWindow):
         global initpos
         if initpos is None:
             print("아직 initpos 수신 전입니다.")
-            return
+            return QMessageBox.warning(self, "Error", "연결되지 않았습니다.")
 
         program_id = self.ui.comboBox_Robot.currentText()
         self.programs_queue[program_id].append(initpos.copy())
@@ -74,19 +114,25 @@ class MyApp(QMainWindow):
     def run_trajectory_program(self):
         global init, initpos
         if init is None or initpos is None:
-            QMessageBox.warning(self, "오류", "Unity 데이터가 아직 수신되지 않았습니다.")
             print("init/initpos 없음. Unity 데이터 수신 전입니다.")
-            return
+            return QMessageBox.warning(self, "Error", "연결되지 않았습니다.")
 
         program_id = self.ui.comboBox_Robot.currentText()
         pose_list = self.programs_queue.get(program_id, [])
 
         if not pose_list:
-            QMessageBox.warning(self, "오류", f"프로그램 {program_id}에 저장된 pose가 없습니다.")
             print(f"프로그램 {program_id}에 저장된 pose가 없습니다.")
-            return
+            return QMessageBox.warning(self, "Error", f"프로그램 {program_id}에 저장된 pose가 없습니다.")
 
         print(f"프로그램 {program_id} 실행 시작 (총 {len(pose_list)}개)")
+
+        try:
+            send_thread = threading.Thread(target=self.calc_send,args=(init,initpos,pose_list),daemon=True)
+            send_thread.start()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"프로그램 실행 중 오류 발생: {e}")
+    
+    def calc_send(self,init,initpos,pose_list):
 
         current_joint = init
         current_pose = initpos
@@ -100,12 +146,10 @@ class MyApp(QMainWindow):
                 data = json.dumps(joint).encode('utf-8')
                 try:
                     self.sock.sendall(data + b'\n')
-                    time.sleep(0.003)
+                    time.sleep(0.001)
                 except Exception as e:
-                    QMessageBox.critical(self, "전송 실패", f"소켓 전송 중 오류 발생: {e}")
                     print(f"[전송 실패] {e}")
-                    return
-
+            
             # 업데이트 상태를 다음 단계 기준으로 갱신
             current_joint = joint_trajectory[-1]
             matexps_b = [se3.matexp(j, B[i], joint=ur5.joints[i].type) for i, j in enumerate(current_joint)]
@@ -146,18 +190,23 @@ class MyApp(QMainWindow):
 
     def send_axis_values(self):
         desired = []
-        for name in self.axis_sliders:
-            val = self.axis_sliders[name].value() * 0.01
-            self.axis_labels[name].setText(f"{val:.2f}")
-            desired.append(val)
+        try:
+            for name in self.axis_sliders:
+                val = self.axis_sliders[name].value() * 0.01
+                self.axis_labels[name].setText(f"{val:.2f}")
+                desired.append(val)
 
-        pose,_ = math.IK(ur5,init,desired)  
+            pose,_ = math.IK(ur5,init,desired)  
 
-        for i, name in enumerate(self.joint_sliders):
-            self.joint_sliders[name].blockSignals(True)
-            self.joint_sliders[name].setValue(int(pose[i] / 0.01))
-            self.joint_sliders[name].blockSignals(False)
-        data = json.dumps(pose).encode('utf-8')        
+            for i, name in enumerate(self.joint_sliders):
+                self.joint_sliders[name].blockSignals(True)
+                self.joint_sliders[name].setValue(int(pose[i] / 0.01))
+                self.joint_sliders[name].blockSignals(False)
+            data = json.dumps(pose).encode('utf-8')
+            
+        except Exception as e:
+            print(f"[오류] 자세 계산 실패: {e}")
+            return
         try:
             self.sock.sendall(data + b'\n')
             print("자세 전송:", pose)
@@ -170,22 +219,22 @@ class MyApp(QMainWindow):
         print(f"속도 레벨 변경됨: {level}")
 
 
-def receive_loop(sock):
-    global init, initpos
-    with sock.makefile('r', encoding='utf-8') as f:
-        for line in f:
-            try:
-                data = json.loads(line.strip())
-                # print("[DATA]", data)
-                init = data['joints']
-                matexps_b = [se3.matexp(init[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
-                T_init = se3.matFK(M,matexps_b)
-                initpos = data['position'] + se3.CurrenntAngles(T_init)
-                # print(initpos)
-                # initpos = data['position'] + data['rotation']
-            except json.JSONDecodeError:
-                # JSON 파싱 실패 시 경고 출력
-                print("[WARN] Invalid JSON received from Unity")
+    def receive_loop(self):
+        global init, initpos
+        with self.sock.makefile('r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    # print("[DATA]", data)
+                    init = data['joints']
+                    matexps_b = [se3.matexp(init[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
+                    T_init = se3.matFK(M,matexps_b)
+                    initpos = data['position'] + se3.CurrenntAngles(T_init)
+                    # print(initpos)
+                    # initpos = data['position'] + data['rotation']
+                except json.JSONDecodeError:
+                    # JSON 파싱 실패 시 경고 출력
+                    print("[WARN] Invalid JSON received from Unity")
 
 if __name__ == '__main__':
 
@@ -196,18 +245,10 @@ if __name__ == '__main__':
     B = ur5.B_tw
     L = len(ur5.joints)
 
-    HOST = '127.0.0.1'
-    PORT = 5000
+    init = None
+    initpos = None
 
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        print(f"Unity connected to {HOST}:{PORT}")
-
-        angle_thread = threading.Thread(target=receive_loop,args=(s,),daemon = True)
-        angle_thread.start()
-
-        app = QApplication(sys.argv)
-        window = MyApp(s)
-        window.show()
-        sys.exit(app.exec_())
+    app = QApplication(sys.argv)
+    window = MyApp()
+    window.show()
+    sys.exit(app.exec_())
