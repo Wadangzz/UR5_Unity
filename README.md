@@ -39,10 +39,12 @@ pip install numpy scipy matplotlib pyqt pyqt5-tools
 ---
 
 ## 🚀 실행 방법
+
 - UR5_RUN 폴더 내에 Unity Bulid UR5 실행   
 - python 실행 전 까지 TCP 수신 대기   
    
-- pythonControl 폴더 내 UR5_QT.py 실행   
+- pythonControl 폴더 내 UR5_QT.py 실행
+- IP, PORT(5000) 입력하여 Unity 연결(localhost = 127.0.0.1)
 - pose, jointangle 슬라이더 조정하여 자세 저장   
 - 실행 시 순서대로 Numerical IK 계산 후 trajectory 생성   
 - UR5 오브젝트 실시간 동작 확인
