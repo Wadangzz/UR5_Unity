@@ -1,36 +1,78 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.spatial.transform import Rotation as R
+import Robot
+import socket
+import json
+import threading
+import time
+import MyRobotMath as math
+from MyRobotMath import SE3
 
-start_point = [0,0,0]
-direction = [0,0,55]
+se3 = SE3()
+ur5 = Robot.UR5()
+M = ur5.zero
+B = ur5.B_tw
+L = len(ur5.joints)
 
-rotation_matrix = R.from_euler('xyz',np.deg2rad([0,-59,93])).as_matrix()
-end_point = start_point + rotation_matrix @ direction
+init = [0,0,0,0,0,0]
+initpos = None
+coodinate = ['x','y','z','roll','pitch','yaw']
 
+# def receive_loop(sock):
+#     global init
+#     with sock.makefile('r', encoding='utf-8') as f:
+#         for line in f:
+#             try:
+#                 data = json.loads(line.strip())
+#                 # print("[DATA]", data)
+#                 init = data['joints']
+#                 initpos = data['position'] + data['rotation']
+#             except json.JSONDecodeError:
+#                 print("[WARN] Invalid JSON")
 
-print(end_point)
-fig = plt.figure(figsize=(6, 6))
-ax = fig.add_subplot(111, projection='3d')
+# with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#     s.connect((HOST, PORT))
+#     print(f" Unity connected on {HOST}:{PORT}")
 
-# 좌표축 설정
-ax.quiver(start_point[0], start_point[1], start_point[2],
-          end_point[0], end_point[1], end_point[2],
-          color='blue', linewidth=2, arrow_length_ratio=0.05)
+#     angle_thread = threading.Thread(target=receive_loop,args=(s,))
+#     angle_thread.start()
 
-# 시작점과 끝점 표시
-ax.scatter(*start_point, color='green', s=50, label='Start')
-ax.scatter(*end_point, color='red', s=50, label='End')
+#     while init is None:
+#         print("[INFO] Waiting for joint angle data from Unity...")
+#         time.sleep(0.1)
 
-ax.set_xlim([-60, 60])
-ax.set_ylim([-60, 60])
-ax.set_zlim([0, 60])
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Z')
-ax.set_title('Vector after ZYX Rotation (Yaw=45°, Pitch=45°, Roll=0°)')
-ax.legend()
-ax.view_init(elev=20, azim=-60)
+while True:
 
-plt.tight_layout()
-plt.show()
+    desired = []
+    for i, comp in enumerate(coodinate):
+        desired.append(float(input(f"{comp} : ")))
+
+    end = math.IK(ur5,init,desired)
+
+    if np.abs(end[1]) > 95:
+        phi = sum(end[1:4])
+        k_1 = ur5.links[2]+ur5.links[4]*np.cos(np.deg2rad(end[2]))
+        k_2 = -ur5.links[4]*np.sin(np.deg2rad(end[2]))
+        
+        end[2] = -end[2]
+        end[1] = end[1] -np.rad2deg(2*np.arctan2(k_2,k_1))
+        end[3] = phi-(end[1]+end[2])
+
+    matexps_b = [se3.matexp(end[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
+    T_d = se3.matFK(M, matexps_b)
+
+    print(se3.CurrenntAngles(T_d))
+
+        # start = np.array(init)
+        # end = np.array(end)
+
+        # trajectory = math.joint_trajectory(start,end,times=1.0,samples=200)
+
+        # visual.plot_trajectory(start,d_theta,L)
+
+        # for angles in trajectory:
+        #     # JSON 직렬화
+        #     data = json.dumps(angles.tolist()).encode('utf-8')
+        #     s.sendall(data + b'\n')  # 한 줄 단위로 구분
+        #     time.sleep(0.001) 
+
+        

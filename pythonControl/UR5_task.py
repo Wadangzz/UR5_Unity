@@ -31,7 +31,7 @@ def receive_loop(sock):
                 init = data['joints']
                 matexps_b = [se3.matexp(init[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
                 T_init = se3.matFK(M,matexps_b)
-                initpos = data['position'] + se3.CurrenntAngles(T_init)
+                initpos = data['position'] + data['rotation']
                 # initpos = data['position'] + data['rotation']
             except json.JSONDecodeError:
                 print("[WARN] Invalid JSON")
@@ -45,8 +45,8 @@ def trajectory(init,initpos,desired,N):
 
     for i in range(len(X_s)):
         x0, y0 ,z0 = X_s[i][:3,3].flatten()
-        roll0, pitch0, yaw0 = se3.CurrenntAngles(X_s[i])
-        pos_d = [x0, y0, z0, roll0, pitch0, yaw0]
+        quat,_ = se3.CurrentQuaternion(X_s[i])
+        pos_d = [x0, y0, z0] + quat
         theta,count = math.IK(ur5,current,pos_d)
         # task trajectoy 발산할 때 or elbow down 자세일 때 joint trajectory로 전환
         if count == 50 or np.abs(theta[1]) > 90: 
@@ -57,8 +57,8 @@ def trajectory(init,initpos,desired,N):
         task_trajectory.append(theta)
         current = theta
         
-    if impos_task:
-        
+    if impos_task: 
+
         end,_ = math.IK(ur5,init,desired)
 
         if np.abs(end[1]) > 90: # elbow down 자세 바닥에 밖히는거 방지
@@ -74,7 +74,8 @@ def trajectory(init,initpos,desired,N):
         start = np.array(init)
         end = np.array(end)
 
-        d_theta, task_trajectory = math.joint_trajectory(start,end,samples=2*N)
+        # joint trajectory 계산
+        d_theta, task_trajectory = math.joint_trajectory(start,end,samples=2*N) 
 
     return task_trajectory
     
@@ -109,8 +110,8 @@ if __name__ == "__main__":
 
             for i in range(len(X_s)):
                 x0, y0 ,z0 = X_s[i][:3,3].flatten()
-                roll0, pitch0, yaw0 = se3.CurrenntAngles(X_s[i])
-                pos_d = [x0, y0, z0, roll0, pitch0, yaw0]
+                quat = se3.CurrentQuaternion(X_s[i])
+                pos_d = [x0, y0, z0] + quat
                 theta,count = math.IK(ur5,current,pos_d)
                 # task trajectoy 발산할 때 or elbow down 자세일 때 joint trajectory로 전환
                 if count == 50 or np.abs(theta[1]) > 90: 

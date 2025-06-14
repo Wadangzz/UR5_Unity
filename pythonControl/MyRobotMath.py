@@ -109,7 +109,18 @@ class SE3:
 
         return j_b
 
-    
+    def euler_to_quat(self, desired, degree = True):
+        j1 ,j2 ,j3 = desired[3], desired[4], desired[5]
+        if degree:
+            roll, pitch, yaw = np.deg2rad([j1, j2, j3])
+        else:
+            roll, pitch, yaw = j1, j2, j3
+
+        quat = R.from_euler('xyz',[roll,pitch,yaw]).as_quat().tolist()
+        desired = desired[:3] + quat
+
+        return desired
+        
     def pose_to_SE3(self, desired, degree = True):
         """
         Compute the desired transformation matrix.
@@ -118,15 +129,16 @@ class SE3:
         :return: Desired transformation matrix (4x4 matrix)
         """
         x, y, z = desired[0], desired[1], desired[2]
-        j1 ,j2 ,j3 = desired[3], desired[4], desired[5]
+        quat = desired[3:]
 
-        if degree:
-            roll, pitch, yaw = np.deg2rad([j1, j2, j3])
-        else:
-            roll, pitch, yaw = j1, j2, j3
+        # if degree:
+        #     roll, pitch, yaw = np.deg2rad([j1, j2, j3])
+        # else:
+        #     roll, pitch, yaw = j1, j2, j3
         
-        rotmat = R.from_euler('xyz',[roll,pitch,yaw]).as_matrix()
-       
+        # rotmat = R.from_euler('xyz',[roll,pitch,yaw]).as_matrix()
+        rotmat = R.from_quat(quat).as_matrix()
+
         T = np.eye(4)
         T[:3,:3] = rotmat
         T[:3, 3] = [float(x), float(y), float(z)]
@@ -213,15 +225,20 @@ class SE3:
         screw = np.concatenate([omega, v])
         return theta * screw, screw, theta
     
-    def CurrenntAngles(self, T_sb):
+    def CurrentQuaternion(self, T_sb):
         """
         Compute the current Euler angle
         :param T_sb : Current forword kinematics transformation matrix (body axis)
         :return : List of Euler angle roll,pitch,yaw (Degree)
         """
+        # R_mat = T_sb[:3, :3]
+        # euler = R.from_matrix(R_mat).as_euler('xyz', degrees=True)  # yaw, pitch, roll
+        # return euler.tolist()  # roll, pitch, yaw 순으로 리턴
+
         R_mat = T_sb[:3, :3]
-        euler = R.from_matrix(R_mat).as_euler('xyz', degrees=True)  # yaw, pitch, roll
-        return euler.tolist()  # roll, pitch, yaw 순으로 리턴
+        quat = R.from_matrix(R_mat).as_quat()  # quaternion
+        euler = R.from_matrix(R_mat).as_euler('xyz',degrees=True) 
+        return quat.tolist(), euler.tolist()  # roll, pitch, yaw 순으로 리턴
     
         # R_31 = T_sb[2,0]
 
@@ -316,75 +333,75 @@ def quintic_time_scaling(t, T):
     s_ddot = (6*a3*(t) + 12*a4*(t)**2 + 20*a5*(t)**3)
     return s, s_dot, s_ddot
 
-# def IK(robot, init, desired):
-#     """
-#     Improved IK that avoids gimbal lock by comparing full SE(3) matrices.
-#     :param robot: Robot class (joint list, screw axes, zero config)
-#     :param init: initial joint angles (degree)
-#     :param desired: desired pose (x, y, z, roll, pitch, yaw)
-#     :return: solution joint angles (degree)
-#     """
-#     se3 = SE3()
-#     M = robot.zero
-#     B = robot.B_tw
-#     S = robot.S_tw
-#     L = len(robot.joints)
+def IK(robot, init, desired):
+    """
+    Improved IK that avoids gimbal lock by comparing full SE(3) matrices.
+    :param robot: Robot class (joint list, screw axes, zero config)
+    :param init: initial joint angles (degree)
+    :param desired: desired pose (x, y, z, quaternion) list size of 7
+    :return: solution joint angles (degree)
+    """
+    se3 = SE3()
+    M = robot.zero
+    B = robot.B_tw
+    S = robot.S_tw
+    L = len(robot.joints)
 
-#     T_d = se3.pose_to_SE3(desired)  # Desired SE(3)
-#     threshold = 1e-4
-#     count = 0
+    T_d = se3.pose_to_SE3(desired)  # Desired SE(3)
+    threshold = 1e-4
+    count = 0
 
-#     while True:
-#         count += 1
+    while True:
+        count += 1
 
-#         # Forward Kinematics
-#         matexps_b = [se3.matexp(init[i], B[i], joint=robot.joints[i].type) for i in range(L)]
-#         matexps_s = [se3.matexp(init[i], S[i], joint=robot.joints[i].type) for i in range(L)]
-#         T_sb = se3.matFK(M, matexps_b)
+        # Forward Kinematics
+        matexps_b = [se3.matexp(init[i], B[i], joint=robot.joints[i].type) for i in range(L)]
+        matexps_s = [se3.matexp(init[i], S[i], joint=robot.joints[i].type) for i in range(L)]
+        T_sb = se3.matFK(M, matexps_b)
 
-#         # Error Transformation
-#         T_bd = np.linalg.inv(T_sb) @ T_d
-#         V_bd, _, _ = se3.matlogm(T_bd)
+        # Error Transformation
+        T_bd = np.linalg.inv(T_sb) @ T_d
+        V_bd, _, _ = se3.matlogm(T_bd)
 
-#         # Jacobian
-#         J_b = se3.body_jacobian(M, matexps_b, matexps_s, S)
+        # Jacobian
+        J_b = se3.body_jacobian(M, matexps_b, matexps_s, S)
         
         
-#         # 특이점 감지 및 감쇠 적용
-#         sigma_min = np.min(np.linalg.svd(J_b, compute_uv=False))
-#         if sigma_min < 1e-3:
-#             print(f"특이점 근접: σ_min={sigma_min:.5f}, damping 적용")
-#             J_pseudo = se3.j_inv(J_b, damping=0.05)  
-#         else:
-#             J_pseudo = se3.j_inv(J_b)
+        # 특이점 감지 및 감쇠 적용
+        sigma_min = np.min(np.linalg.svd(J_b, compute_uv=False))
+        if sigma_min < 1e-3:
+            print(f"특이점 근접: σ_min={sigma_min:.5f}, damping 적용")
+            J_pseudo = se3.j_inv(J_b, damping=0.05)  
+        else:
+            J_pseudo = se3.j_inv(J_b)
 
-#         # Update joint angle (in rad)
-#         theta = deg2rad(init, robot.joints)
-#         thetak = theta.reshape(L, 1) + J_pseudo @ V_bd.reshape(L, 1) + np.random.normal(0,0.0001,L).reshape(L,1)
-#         thetak = rad2deg(thetak, robot.joints)
-#         init = theta_normalize(thetak, robot.joints)
+        # Update joint angle (in rad)
+        theta = deg2rad(init, robot.joints)
+        thetak = theta.reshape(L, 1) + J_pseudo @ V_bd.reshape(L, 1)
+        thetak = rad2deg(thetak, robot.joints)
+        init = theta_normalize(thetak, robot.joints)
 
-#         # Check error norm (position and rotation)
-#         pos_err = np.linalg.norm(T_d[:3, 3] - T_sb[:3, 3])
-#         rot_err = np.linalg.norm(V_bd)  # 전체 twist 벡터의 노름 사용
+        # Check error norm (position and rotation)
+        pos_err = np.linalg.norm(T_bd[:3, 3])
+        rot_err = np.linalg.norm(V_bd)  # 전체 twist 벡터의 노름 사용
         
-#         # 현재 위치와 자세 출력
-#         current_pos = T_sb[:3, 3]
-#         current_rot = se3.CurrenntAngles(T_sb)
+        # 현재 위치와 자세 출력
+        # current_pos = T_sb[:3, 3]
+        # current_rot,_ = se3.CurrentQuaternion(T_sb)
         
-#         if pos_err < threshold and rot_err < np.deg2rad(0.1):
-#             print(f"현재 위치: {current_pos}")
-#             print(f"현재 자세: {current_rot}")
-#             print(f"연산 횟수: {count}, Joint Value: {init}")
-#             break
+        if pos_err < threshold and rot_err < np.deg2rad(0.1):
+            # print(f"현재 위치: {current_pos}")
+            # print(f"현재 자세: {current_rot}")
+            # print(f"연산 횟수: {count}, Joint Value: {init}")
+            break
 
-#         if count >= 100:
-#             print(f"현재 위치: {current_pos}")
-#             print(f"현재 자세: {current_rot}")
-#             print(f"연산 종료 (Max iter). Joint Value: {init}")
-#             break
+        if count >= 50:
+            # print(f"현재 위치: {current_pos}")
+            # print(f"현재 자세: {current_rot}")
+            # print(f"연산 종료 (Max iter). Joint Value: {init}")
+            break
 
-#     return init
+    return init, count
 
 def interpolate_SE3_quat(T0, Td, T, N):
     """
@@ -540,71 +557,70 @@ def joint_trajectory(start, end, times=1.0, samples=100):
     
     return d_theta, trajectory
 
-def IK(robot,init,desired):
+# def IK(robot,init,desired):
 
-    se3 = SE3()
-    M = robot.zero
-    B = robot.B_tw
-    S = robot.S_tw
-    L = len(robot.joints)
+#     se3 = SE3()
+#     M = robot.zero
+#     B = robot.B_tw
+#     S = robot.S_tw
+#     L = len(robot.joints)
 
-    T_d = se3.pose_to_SE3(desired)
-    threshold = 1e-2 # 오차 범위
-    count = 0
+#     T_d = se3.pose_to_SE3(desired)
+#     threshold = 1e-2 # 오차 범위
+#     count = 0
         
-    while True:
+#     while True:
 
-        matexps_b = []
-        matexps_s = []
+#         matexps_b = []
+#         matexps_s = []
 
+#         count += 1 # 연산 횟수 증가
 
-        count += 1 # 연산 횟수 증가
+#         # Forward Kinematics
+#         matexps_b = [se3.matexp(init[i], B[i], joint=robot.joints[i].type) for i in range(L)]
+#         matexps_s = [se3.matexp(init[i], S[i], joint=robot.joints[i].type) for i in range(L)]
+#         T_sb = se3.matFK(M, matexps_b)
 
-        # Forward Kinematics
-        matexps_b = [se3.matexp(init[i], B[i], joint=robot.joints[i].type) for i in range(L)]
-        matexps_s = [se3.matexp(init[i], S[i], joint=robot.joints[i].type) for i in range(L)]
-        T_sb = se3.matFK(M, matexps_b)
-
-        T_sb = se3.matFK(M,matexps_b) # Forward Kinematics 적용 변환행렬
-        estimated = []
-        for i in range(3):
-            estimated.append(T_sb[i,3].item()) # 현재 x, y, z
+#         T_sb = se3.matFK(M,matexps_b) # Forward Kinematics 적용 변환행렬
+#         estimated = []
+#         for i in range(3):
+#             estimated.append(T_sb[i,3].item()) # 현재 x, y, z
         
-        eulerAngles = se3.CurrenntAngles(T_sb)
-        for eulerAngle in eulerAngles:
-            estimated.append(eulerAngle) # Euler 각도 추정값
+#         eulerAngles = se3.CurrentQuaternion(T_sb)
+#         for eulerAngle in eulerAngles:
+#             estimated.append(eulerAngle) # Euler 각도 추정값
 
-        pos_err = np.array(desired[:3]) - np.array(estimated[:3]) # x, y, z 오차
+#         pos_err = np.array(desired[:3]) - np.array(estimated[:3]) # x, y, z 오차
 
-        T_bd = np.dot(np.linalg.inv(T_sb),T_d) # Relative Trasformation Matrix
-        J_b = se3.body_jacobian(M,matexps_b,matexps_s,S) # Body Jacobian
+#         T_bd = np.dot(np.linalg.inv(T_sb),T_d) # Relative Trasformation Matrix
+#         J_b = se3.body_jacobian(M,matexps_b,matexps_s,S) # Body Jacobian
         
-        # 특이점 감지 및 감쇠 적용
-        sigma_min = np.min(np.linalg.svd(J_b, compute_uv=False))
-        if sigma_min < 1e-2:
-            print(f"특이점 근접: σ_min={sigma_min:.5f}, damping 적용")
-            J_pseudo = se3.j_inv(J_b, damping=0.1)  
-        else:
-            J_pseudo = se3.j_inv(J_b)
+#         # 특이점 감지 및 감쇠 적용
+#         sigma_min = np.min(np.linalg.svd(J_b, compute_uv=False))
+#         if sigma_min < 1e-2:
+#             print(f"특이점 근접: σ_min={sigma_min:.5f}, damping 적용")
+#             J_pseudo = se3.j_inv(J_b, damping=0.1)  
+#         else:
+#             J_pseudo = se3.j_inv(J_b)
 
-        V_bd,_,_ = se3.matlogm(T_bd) # Ralative Twist, 각도 오차
+#         V_bd,_,_ = se3.matlogm(T_bd) # Ralative Twist, 각도 오차
 
-        theta = deg2rad(init,robot.joints)
+#         theta = deg2rad(init,robot.joints)
 
-        thetak = theta.reshape(L,1) + J_pseudo @ V_bd.reshape(L,1)
-        thetak = rad2deg(thetak,robot.joints)
+#         thetak = theta.reshape(L,1) + J_pseudo @ V_bd.reshape(L,1)
+#         thetak = rad2deg(thetak,robot.joints)
 
-        # 각도 정규화 후 갱신 (-180~180)
-        init = theta_normalize(thetak,robot.joints)
-        # print(init)
+#         # 각도 정규화 후 갱신 (-180~180)
+#         init = theta_normalize(thetak,robot.joints)
+#         # print(init)
 
-        if np.all(np.abs(pos_err) < threshold): # 오차가 임계값 이내면 break
-            # print(estimated)
-            # print(f"연산 횟수 : {count}, Joint Value : {init}")
-            break
-        if count >= 50:
-            # print(estimated)
-            # print(f"연산 횟수 : {count}, Joint Value : {init}")
-            break
+#         if np.all(np.abs(pos_err) < threshold): # 오차가 임계값 이내면 break
+#             # print(estimated)
+#             # print(f"연산 횟수 : {count}, Joint Value : {init}")
+#             break
+#         if count >= 50:
+#             # print(estimated)
+#             # print(f"연산 횟수 : {count}, Joint Value : {init}")
+#             break
 
-    return init, count
+#     return init, count

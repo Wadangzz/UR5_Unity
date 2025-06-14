@@ -1,4 +1,5 @@
-import sys, socket, json, time
+import sys, socket, json, time, sqlite3
+import trajectorysqlite as ts
 import Robot
 import threading
 import UR5_task
@@ -13,6 +14,7 @@ class MyApp(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
+        self.lock = threading.Lock()
         self.sock = None
         self.connected = False
         self.receive_thread = None
@@ -78,7 +80,7 @@ class MyApp(QMainWindow):
         self.connected = False
 
 
-    # 속도 레벨에 따라 샘플 수 조정 (최대 1000)
+    # 속도 레벨에 따라 샘플 수 조정 (최대 5000)
     # 샘플 수가 적을 수록 속도가 빨라짐
     def get_speed_sample_count(self):
         level = self.ui.slider_Speed.value()
@@ -86,7 +88,8 @@ class MyApp(QMainWindow):
     
     # 프로그램 ID에 해당하는 테이블 업데이트
     def update_table(self, program_id):
-        pose_list = self.programs_queue[program_id]
+        # pose_list = self.programs_queue[program_id]
+        pose_list = ts.load_poses_from_db(program_id)
         self.ui.tableWidget.setRowCount(len(pose_list))
         for row, pose in enumerate(pose_list):
             for col, val in enumerate(pose):
@@ -106,26 +109,58 @@ class MyApp(QMainWindow):
             return QMessageBox.warning(self, "Error", "연결되지 않았습니다.")
 
         program_id = self.ui.comboBox_Robot.currentText()
-        self.programs_queue[program_id].append(initpos.copy())
+        ts.save_pose_to_db(program_id, initpos)
+        # self.programs_queue[program_id].append(initpos.copy())
         print(f"프로그램 {program_id} 위치 저장됨:", initpos)
         self.update_table(program_id)
 
     # 현재 프로그램의 자세를 실행하는 함수
+    # def run_trajectory_program(self):
+    #     global init, initpos
+    #     if init is None or initpos is None:
+    #         print("init/initpos 없음. Unity 데이터 수신 전입니다.")
+    #         return QMessageBox.warning(self, "Error", "연결되지 않았습니다.")
+
+    #     program_id = self.ui.comboBox_Robot.currentText()
+    #     pose_list = self.programs_queue.get(program_id, [])
+
+    #     if not pose_list:
+    #         print(f"프로그램 {program_id}에 저장된 pose가 없습니다.")
+    #         return QMessageBox.warning(self, "Error", f"프로그램 {program_id}에 저장된 pose가 없습니다.")
+
+    #     print(f"프로그램 {program_id} 실행 시작 (총 {len(pose_list)}개)")
+
+    #     try:
+    #         send_thread = threading.Thread(target=self.calc_send,args=(init,initpos,pose_list),daemon=True)
+    #         send_thread.start()
+    #     except Exception as e:
+    #         QMessageBox.critical(self, "Error", f"프로그램 실행 중 오류 발생: {e}")
+
     def run_trajectory_program(self):
         global init, initpos
         if init is None or initpos is None:
-            print("init/initpos 없음. Unity 데이터 수신 전입니다.")
-            return QMessageBox.warning(self, "Error", "연결되지 않았습니다.")
+            return QMessageBox.warning(self, "Error", "Unity 데이터가 수신되지 않았습니다.")
 
         program_id = self.ui.comboBox_Robot.currentText()
-        pose_list = self.programs_queue.get(program_id, [])
+        row_count = self.ui.tableWidget.rowCount()
+        if row_count == 0:
+            return QMessageBox.warning(self, "Error", "테이블에 저장된 pose가 없습니다.")
 
-        if not pose_list:
-            print(f"프로그램 {program_id}에 저장된 pose가 없습니다.")
-            return QMessageBox.warning(self, "Error", f"프로그램 {program_id}에 저장된 pose가 없습니다.")
+        pose_list = []
+        for row in range(row_count):
+            pose = []
+            for col in range(7):  # X, Y, Z, quaternion
+                item = self.ui.tableWidget.item(row, col)
+                if item is None:
+                    pose.append(0.0)
+                else:
+                    try:
+                        pose.append(float(item.text()))
+                    except ValueError:
+                        pose.append(0.0)  # or handle error
+            pose_list.append(pose)
 
         print(f"프로그램 {program_id} 실행 시작 (총 {len(pose_list)}개)")
-
         try:
             send_thread = threading.Thread(target=self.calc_send,args=(init,initpos,pose_list),daemon=True)
             send_thread.start()
@@ -140,21 +175,29 @@ class MyApp(QMainWindow):
         for i, target_pose in enumerate(pose_list):
             print(f"▶ {i+1}/{len(pose_list)} → {target_pose}")
             n = self.get_speed_sample_count()
-            joint_trajectory = UR5_task.trajectory(current_joint, current_pose, target_pose, n)
+            trajectory = UR5_task.trajectory(current_joint, current_pose, target_pose, n)
 
-            for joint in joint_trajectory:
+            interval = 0.005  # 5ms
+            next_time = time.perf_counter()
+
+            for joint in trajectory:
+                now = time.perf_counter()
+                if now < next_time:
+                    time.sleep(next_time - now)
                 data = json.dumps(joint).encode('utf-8')
                 try:
-                    self.sock.sendall(data + b'\n')
-                    time.sleep(0.001)
+                    with self.lock:
+                        self.sock.sendall(data + b'\n')
                 except Exception as e:
                     print(f"[전송 실패] {e}")
+
+                next_time += interval
             
             # 업데이트 상태를 다음 단계 기준으로 갱신
-            current_joint = joint_trajectory[-1]
+            current_joint = trajectory[-1]
             matexps_b = [se3.matexp(j, B[i], joint=ur5.joints[i].type) for i, j in enumerate(current_joint)]
             T = se3.matFK(M, matexps_b)
-            current_pose = T[:3, 3].tolist() + se3.CurrenntAngles(T)
+            current_pose = T[:3, 3].tolist() + se3.CurrentQuaternion(T)[0]
 
     def connect_joint_sliders(self):
         for name, slider in self.joint_sliders.items():
@@ -172,9 +215,9 @@ class MyApp(QMainWindow):
             angle.append(val)
         matexps_b = [se3.matexp(angle[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
         T = se3.matFK(M, matexps_b)
-        x, y ,z = T[:3,3].flatten()
-        roll, pitch, yaw = se3.CurrenntAngles(T)
-        pos = [x, y, z, roll, pitch, yaw]
+        x, y, z = T[:3,3].flatten()
+        _, euler = se3.CurrentQuaternion(T)
+        pos = [x, y, z] + euler
         for i, name in enumerate(self.axis_sliders):
             self.axis_sliders[name].blockSignals(True)
             self.axis_sliders[name].setValue(int(pos[i] / 0.01))
@@ -189,19 +232,21 @@ class MyApp(QMainWindow):
             print("[소켓 전송 실패]", e)
 
     def send_axis_values(self):
-        desired = []
+        pos = []
         try:
             for name in self.axis_sliders:
                 val = self.axis_sliders[name].value() * 0.01
                 self.axis_labels[name].setText(f"{val:.2f}")
-                desired.append(val)
+                pos.append(val)
 
-            pose,_ = math.IK(ur5,init,desired)  
+            desired = se3.euler_to_quat(pos)
+            pose,_ = math.IK(ur5,init,desired)
 
             for i, name in enumerate(self.joint_sliders):
                 self.joint_sliders[name].blockSignals(True)
                 self.joint_sliders[name].setValue(int(pose[i] / 0.01))
                 self.joint_sliders[name].blockSignals(False)
+                self.joint_labels[name].setText(f"{pose[i]:.2f}")
             data = json.dumps(pose).encode('utf-8')
             
         except Exception as e:
@@ -228,10 +273,8 @@ class MyApp(QMainWindow):
                     # print("[DATA]", data)
                     init = data['joints']
                     matexps_b = [se3.matexp(init[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
-                    T_init = se3.matFK(M,matexps_b)
-                    initpos = data['position'] + se3.CurrenntAngles(T_init)
-                    # print(initpos)
-                    # initpos = data['position'] + data['rotation']
+                    # T_init = se3.matFK(M,matexps_b)
+                    initpos = data['position'] + data['rotation']
                 except json.JSONDecodeError:
                     # JSON 파싱 실패 시 경고 출력
                     print("[WARN] Invalid JSON received from Unity")

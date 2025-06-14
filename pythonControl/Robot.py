@@ -70,7 +70,7 @@ class SCARA:
             JointSpec('R', 'z', 'x'),
         ]
 
-        # SCARA 로봇 링크 생성
+        # SCARA 로봇 링크 생성 (matplotlib에서 사용되는 RobotLink 객체)
         self.links = [
             RobotLink(L1, JointSpec(None, 'z', 'z'), parent=self),  # L1: J1 회전 축 관절
             RobotLink(L2, self.joints[0], color='c', parent=self),  # L2: J1 관절에 의해 회전
@@ -150,7 +150,7 @@ class BarretWAM:
         self.S_tw = (se3.adjoint(self.zero) @ np.array(self.B_tw).T).T.tolist()
 
 class UR5:
-
+    
     def __init__(self,L1=89.2,L2=135.85,L3=425,L4=119.7,L5=392.25,L6=93,L7=94.65,L8=82.3):
         
         self.joints = [

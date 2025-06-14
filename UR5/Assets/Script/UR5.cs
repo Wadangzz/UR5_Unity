@@ -6,6 +6,7 @@ using System.Threading;
 using System.IO;
 using System.Net;
 using Unity.VisualScripting;
+using UnityEngine.UIElements;
 
 public class UR5 : MonoBehaviour
 {
@@ -17,21 +18,26 @@ public class UR5 : MonoBehaviour
     private Thread receiveThread;
     private readonly float[] currentAngles = new float[6];
     private readonly float[] jointAngles = new float[6] { 0, 0, 0, 0, 0, 0 };
+    private Vector3[] axis = new Vector3[6] { Vector3.down,
+                                            Vector3.left,
+                                            Vector3.left,
+                                            Vector3.left, 
+                                            Vector3.down, 
+                                            Vector3.left };
     private float[] pos = new float[3] { 0, 0, 0 };
+    private float[] quat = new float[4] { 0, 0, 0, 0 };
 
     private bool isConnected = false;
 
     [Header("Robots")]
     [SerializeField] private GameObject[] ur5 = new GameObject[7];
 
-    [Header("Endeffector")]
-    [SerializeField] private GameObject end;
-
     [Serializable]
     public class RobotState
     {
         public float[] joints;
         public float[] position;
+        public float[] rotation;
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
@@ -100,7 +106,8 @@ public class UR5 : MonoBehaviour
                 RobotState state = new RobotState
                 {
                     joints = jointAngles,
-                    position = pos
+                    position = pos,
+                    rotation = quat
                 };
                 string msg = JsonUtility.ToJson(state);
                 writer.WriteLine(msg);
@@ -151,18 +158,26 @@ public class UR5 : MonoBehaviour
         {
             Array.Copy(currentAngles, jointAngles, 6);
         }
-        //Debug.Log($"[UR5 angles] {string.Join(", ", jointAngles)}");
-        ur5[1].transform.localRotation = Quaternion.Euler(0, -jointAngles[0], 0);
-        ur5[2].transform.localRotation = Quaternion.Euler(-jointAngles[1], 0, 0);
-        ur5[3].transform.localRotation = Quaternion.Euler(-jointAngles[2], 0, 0);
-        ur5[4].transform.localRotation = Quaternion.Euler(-jointAngles[3], 0, 0);
-        ur5[5].transform.localRotation = Quaternion.Euler(0, -jointAngles[4], 0);
-        ur5[6].transform.localRotation = Quaternion.Euler(-jointAngles[5], 0, 0);
+        ////Debug.Log($"[UR5 angles] {string.Join(", ", jointAngles)}");
+        //ur5[1].transform.localRotation = Quaternion.Euler(0, -jointAngles[0], 0);
+        //ur5[2].transform.localRotation = Quaternion.Euler(-jointAngles[1], 0, 0);
+        //ur5[3].transform.localRotation = Quaternion.Euler(-jointAngles[2], 0, 0);
+        //ur5[4].transform.localRotation = Quaternion.Euler(-jointAngles[3], 0, 0);
+        //ur5[5].transform.localRotation = Quaternion.Euler(0, -jointAngles[4], 0);
+        //ur5[6].transform.localRotation = Quaternion.Euler(-jointAngles[5], 0, 0);
+        for (int i = 0; i < 6;i++)
+        {
+            ur5[i+1].transform.localRotation = Quaternion.AngleAxis(jointAngles[i],axis[i]);
+        }
+        pos = new float[3] { ur5[6].transform.position[0],
+                            ur5[6].transform.position[2], 
+                            ur5[6].transform.position[1] };
+        quat = new float[4] { ur5[6].transform.rotation.x,
+                            ur5[6].transform.rotation.z,
+                            ur5[6].transform.rotation.y,
+                            ur5[6].transform.rotation.w };
 
-
-        pos = new float[3] { ur5[6].transform.position[0], ur5[6].transform.position[2], ur5[6].transform.position[1] };
-
-        Debug.Log($"End-Effector : {string.Join(", ", pos)}");
+        Debug.Log($"End-Effector : {string.Join(", ", pos)},{string.Join(", ", quat)}");
         Debug.Log($"JointAngles : {String.Join(", ", jointAngles)}");
     }
     void OnApplicationQuit()
