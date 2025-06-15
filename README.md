@@ -42,21 +42,20 @@ pip install numpy scipy matplotlib pyqt pyqt5-tools
 
 - UR5_RUN 폴더 내에 Unity Bulid UR5 실행   
 - python 실행 전 까지 TCP 수신 대기   
-   
-- pythonControl 폴더 내 UR5_QT.py 실행
-- IP, PORT(5000) 입력하여 Unity 연결(localhost = 127.0.0.1)
+- pythonControl 폴더 내 UR5_QT.py 실행   
+- IP, PORT(5000) 입력하여 Unity 연결(localhost = 127.0.0.1)   
 - pose, jointangle 슬라이더 조정하여 자세 저장   
 - 실행 시 순서대로 Numerical IK 계산 후 trajectory 생성   
-- UR5 오브젝트 실시간 동작 확인
+- UR5 오브젝트 실시간 동작 확인   
 
 ---
 
 ## 📌 수정 사항
 
-- SQLite DB 추가해서 Qt GUI 종료해도 이전 저장 값 유지
-- euler angle 해석, 동작하는 부분 quaternion으로 변경( Gimbol Lock 회피 용이 )
-- Reset 버튼 추가해서 프로그램 리셋 기능 구현 예정   
-- pyinstaller로 최종 exe 파일 Build(github 용량 제한......)
+- SQLite DB 추가해서 Qt GUI 종료해도 이전 저장 값 유지   
+- euler angle 해석, 동작하는 부분 quaternion으로 변경( Gimbol Lock 회피 용이 )   
+- Reset 버튼 추가해서 프로그램 리셋 기능 구현   
+- pyinstaller로 최종 exe 파일 Build 및 Release   
 
 ---
 
