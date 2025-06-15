@@ -7,6 +7,7 @@ using System.IO;
 using System.Net;
 using Unity.VisualScripting;
 using UnityEngine.UIElements;
+using UnityEngine.Timeline;
 
 public class UR5 : MonoBehaviour
 {
@@ -14,6 +15,7 @@ public class UR5 : MonoBehaviour
     private TcpClient client;
     private StreamReader reader;
     private StreamWriter writer;
+    private Thread acceptThread;
     private Thread sendThread;
     private Thread receiveThread;
     private readonly float[] currentAngles = new float[6];
@@ -46,7 +48,7 @@ public class UR5 : MonoBehaviour
         tcpListener = new TcpListener(IPAddress.Any, 5000);
         tcpListener.Start();
 
-        Thread acceptThread = new Thread(AcceptClientLoop);
+        acceptThread = new Thread(AcceptClientLoop);
         acceptThread.IsBackground = true;
         acceptThread.Start();
     }
@@ -172,18 +174,19 @@ public class UR5 : MonoBehaviour
         pos = new float[3] { ur5[6].transform.position[0],
                             ur5[6].transform.position[2], 
                             ur5[6].transform.position[1] };
-        quat = new float[4] { ur5[6].transform.rotation.x,
-                            ur5[6].transform.rotation.z,
-                            ur5[6].transform.rotation.y,
+        quat = new float[4] { -ur5[6].transform.rotation.x,
+                            -ur5[6].transform.rotation.z,
+                            -ur5[6].transform.rotation.y,
                             ur5[6].transform.rotation.w };
 
-        Debug.Log($"End-Effector : {string.Join(", ", pos)},{string.Join(", ", quat)}");
+        Debug.Log($"End-Effector : {string.Join(", ", pos)}, {string.Join(", ", quat)}");
         Debug.Log($"JointAngles : {String.Join(", ", jointAngles)}");
     }
     void OnApplicationQuit()
     {
         reader?.Close();
         tcpListener.Stop();
+        try { acceptThread?.Interrupt(); } catch { }
         try { sendThread?.Interrupt(); } catch { }
         try { receiveThread?.Interrupt(); } catch { }
     }
