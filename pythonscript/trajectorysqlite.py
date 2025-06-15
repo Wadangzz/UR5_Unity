@@ -19,3 +19,12 @@ def load_poses_from_db(program_id):
         ''', (program_id,))
         poses = cursor.fetchall()    
     return [list(p) for p in poses]
+
+def reset_poses_from_db(program_id):
+    with sqlite3.connect("trajectory.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM Program
+            WHERE program_id = ?
+        ''', (program_id,))
+        conn.commit() 

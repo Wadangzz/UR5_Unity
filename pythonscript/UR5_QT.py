@@ -40,7 +40,8 @@ class MyApp(QMainWindow):
         self.ui.comboBox_Robot.currentIndexChanged.connect(self.on_program_changed) # 프로그램 번호 변경 드롭다운
         self.ui.pB_Queuepos.clicked.connect(self.queue_current_pose) # 자세 저장 버튼
         self.ui.pB_Start.clicked.connect(self.run_trajectory_program) # 프로그램 실행 버튼
-        self.ui.slider_Speed.valueChanged.connect(self.speed_level_changed)
+        self.ui.pB_Reset.clicked.connect(self.reset_current_program) # 프로그램 리셋 버튼
+        self.ui.slider_Speed.valueChanged.connect(self.speed_level_changed) # 속도 조절
         self.connect_joint_sliders()       
         self.connect_axis_sliders()
 
@@ -112,6 +113,11 @@ class MyApp(QMainWindow):
         ts.save_pose_to_db(program_id, initpos)
         # self.programs_queue[program_id].append(initpos.copy())
         print(f"프로그램 {program_id} 위치 저장됨:", initpos)
+        self.update_table(program_id)
+
+    def reset_current_program(self):
+        program_id = self.ui.comboBox_Robot.currentText()
+        ts.reset_poses_from_db(program_id)
         self.update_table(program_id)
 
     # 현재 프로그램의 자세를 실행하는 함수
