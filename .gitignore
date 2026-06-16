@@ -10,9 +10,10 @@ docs/
 .vscode/
 .idea/
 
-# Generated outputs (demo gif/png/npz)
+# Generated outputs (demo gif/png/npz) + 런타임 DB
 outputs/
 *.npz
+*.db
 
 # Office / 문서 작업 파일
 *.pptx
