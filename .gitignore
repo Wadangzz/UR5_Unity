@@ -11,3 +11,8 @@ venv/
 
 # Generated data (trajectories)
 *.npz
+
+# Office / 문서 작업 파일
+*.pptx
+*.docx
+*.xlsx

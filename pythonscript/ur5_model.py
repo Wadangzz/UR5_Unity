@@ -14,13 +14,34 @@ import numpy as np
 from MyRobotMath import SE3
 
 # --- 링크 좌표계 home 상대변환 (M_{i-1,i}) ---
-M01 = np.array([[1, 0, 0, 0],     [0, 1, 0, 0],      [0, 0, 1, 0.089159], [0, 0, 0, 1]])
-M12 = np.array([[0, 0, 1, 0.28],  [0, 1, 0, 0.13585],[-1, 0, 0, 0],       [0, 0, 0, 1]])
-M23 = np.array([[1, 0, 0, 0],     [0, 1, 0, -0.1197],[0, 0, 1, 0.395],    [0, 0, 0, 1]])
-M34 = np.array([[0, 0, 1, 0],     [0, 1, 0, 0],      [-1, 0, 0, 0.14225], [0, 0, 0, 1]])
-M45 = np.array([[1, 0, 0, 0],     [0, 1, 0, 0.093],  [0, 0, 1, 0],        [0, 0, 0, 1]])
-M56 = np.array([[1, 0, 0, 0],     [0, 1, 0, 0],      [0, 0, 1, 0.09465],  [0, 0, 0, 1]])
-M67 = np.array([[1, 0, 0, 0],     [0, 0, 1, 0.0823], [0, -1, 0, 0],       [0, 0, 0, 1]])
+M01 = np.array([[1, 0, 0, 0],
+                [0, 1, 0, 0],  
+                [0, 0, 1, 0.089159], 
+                [0, 0, 0, 1]])
+M12 = np.array([[0, 0, 1, 0.28],
+                [0, 1, 0, 0.13585],
+                [-1, 0, 0, 0],
+                [0, 0, 0, 1]])
+M23 = np.array([[1, 0, 0, 0], 
+                [0, 1, 0, -0.1197],
+                [0, 0, 1, 0.395],   
+                [0, 0, 0, 1]])
+M34 = np.array([[0, 0, 1, 0], 
+                [0, 1, 0, 0],
+                [-1, 0, 0, 0.14225],
+                [0, 0, 0, 1]])
+M45 = np.array([[1, 0, 0, 0],
+                [0, 1, 0, 0.093],
+                [0, 0, 1, 0],  
+                [0, 0, 0, 1]])
+M56 = np.array([[1, 0, 0, 0],  
+                [0, 1, 0, 0],   
+                [0, 0, 1, 0.09465],
+                [0, 0, 0, 1]])
+M67 = np.array([[1, 0, 0, 0],  
+                [0, 0, 1, 0.0823],
+                [0, -1, 0, 0],   
+                [0, 0, 0, 1]])
 MLIST = [M01, M12, M23, M34, M45, M56, M67]
 
 # --- 링크별 공간관성 G_i = diag(Ixx, Iyy, Izz, m, m, m) ---
@@ -125,3 +146,23 @@ def ik(T_target, theta0=None, eomg=1e-4, ev=1e-4, max_iter=100):
         Vb = SE3.log(T_err)[0]                            # body twist 오차
         theta = theta + np.linalg.pinv(jacobian_body(theta)) @ Vb
     return wrap(theta), False
+
+
+# ----------------------------------------------------------------------
+#  Kinematics.IK (degree 기반, 원본) 호환 어댑터
+#    MR 모델을 robot 인터페이스(.zero/.B_tw/.S_tw/.joints)로 노출 →
+#    Kinematics.IK(ik_robot, init_deg, desired) 로 그대로 호출 가능.
+#    (주의: Kinematics.IK 는 degree 입출력 → 호출부에서 deg↔rad 변환 필요)
+# ----------------------------------------------------------------------
+class _RevoluteJoint:
+    type = 'R'
+
+
+class _IKAdapter:
+    zero = M_HOME
+    B_tw = BLIST.T.tolist()      # 행 = 관절별 body screw 6벡터
+    S_tw = SLIST.T.tolist()      # 행 = 관절별 space screw 6벡터
+    joints = [_RevoluteJoint() for _ in range(N)]
+
+
+ik_robot = _IKAdapter()

@@ -15,7 +15,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
-from MyRobotMath import Dynamics, quintic_time_scaling
+from MyRobotMath import Dynamics, Kinematics, SE3, quintic_time_scaling
 import ur5_model as ur5
 
 np.set_printoptions(precision=4, suppress=True)
@@ -36,13 +36,17 @@ p_des = T_des[:3, 3]
 print(f"  목표 end-effector 위치 [m] = {p_des}")
 
 # ====================================================================
-# ② 역기구학 (IK) — 목표 자세를 풀어 관절각 산출
+# ② 역기구학 (IK) — 원본 Kinematics.IK (Newton-Raphson, degree) 사용
+#    MR 모델 → ur5.ik_robot 어댑터, 결과 degree → radian 변환
 # ====================================================================
-banner("② 역기구학 (IK)")
+banner("② 역기구학 (IK) — Kinematics.IK (원본)")
 theta_start = np.zeros(6)
-theta_goal, ok = ur5.ik(T_des, theta_start)
+desired = p_des.tolist() + SE3.orientation(T_des)[0]        # [x,y,z, quaternion]
+theta_goal_deg, count = Kinematics.IK(ur5.ik_robot, [0.0] * 6, desired)
+theta_goal = np.deg2rad(theta_goal_deg)                     # ← degree → radian 변환
 p_ik = ur5.fk(theta_goal)[:3, 3]
-print(f"  IK 수렴: {ok}")
+print(f"  Kinematics.IK 반복 횟수: {count}")
+print(f"  목표 관절각 θ_goal [deg] = {np.round(theta_goal_deg, 3)}")
 print(f"  목표 관절각 θ_goal [rad] = {theta_goal}")
 print(f"  IK 해의 말단 위치 [m]    = {p_ik}   (오차 {np.linalg.norm(p_ik-p_des):.1e} m)")
 
