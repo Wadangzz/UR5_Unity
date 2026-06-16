@@ -17,6 +17,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from MyRobotMath import Dynamics, quintic_time_scaling
 import ur5_model as ur5
+from paths import out
 
 np.set_printoptions(precision=4, suppress=True)
 
@@ -109,7 +110,7 @@ ratio = err_pd[mv].max() / max(err_ct[mv].max(), 1e-12)
 print(f"     → Computed Torque 가 약 {ratio:.0f}배 더 정밀하게 추종")
 
 # 애니메이션용 저장 (기준 + 두 제어기 결과)
-np.savez("tracking_trajectory.npz", t=t_ct, theta_ref=ref,
+np.savez(out("tracking_trajectory.npz"), t=t_ct, theta_ref=ref,
          theta_ct=th_ct, theta_pd=th_pd)
 print("\n[저장] tracking_trajectory.npz")
 print("[완료] 동역학 모델(M·C·g)을 활용한 궤적 추종 제어.")

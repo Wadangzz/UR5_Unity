@@ -13,9 +13,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 import ur5_model as ur5
+from paths import out
 
 # --- 궤적 로드 ---
-data = np.load("pd_trajectory.npz")
+data = np.load(out("pd_trajectory.npz"))
 t, theta, theta_d = data["t"], data["theta"], data["theta_d"]
 
 # 프레임별 관절 위치 (F, 8, 3) 및 목표 자세
@@ -60,7 +61,7 @@ def update(i):
 
 anim = FuncAnimation(fig, update, frames=len(frames), interval=40, blit=False)
 
-anim.save("ur5_control.gif", writer=PillowWriter(fps=25))
+anim.save(out("ur5_control.gif"), writer=PillowWriter(fps=25))
 print(f"[저장] ur5_control.gif  ({len(frames)} 프레임)")
 
 plt.show()

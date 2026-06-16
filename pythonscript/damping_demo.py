@@ -18,6 +18,7 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from MyRobotMath import Dynamics
 import ur5_model as ur5
+from paths import out
 
 np.set_printoptions(precision=3, suppress=True)
 
@@ -88,6 +89,6 @@ plt.xlabel("time [s]"); plt.ylabel("shoulder angle [deg]")
 plt.title("Damping ratio effect  (Computed Torque set-point)")
 plt.legend(); plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig("damping_response.png", dpi=95)
+plt.savefig(out("damping_response.png"), dpi=95)
 print("\n[저장] damping_response.png")
 print("→ 빨강(ζ=0.2): 목표를 지나쳐 출렁임 / 초록(ζ=1): 깔끔 / 파랑(ζ=2): 느림")

@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 from MyRobotMath import Dynamics, Kinematics, SE3, quintic_time_scaling
 import ur5_model as ur5
+from paths import out
 
 np.set_printoptions(precision=4, suppress=True)
 ARGS = (ur5.GRAVITY, np.zeros(6), ur5.MLIST, ur5.GLIST, ur5.SLIST)
@@ -141,7 +142,7 @@ def update(i):
 
 
 anim = FuncAnimation(fig, update, frames=len(frames), interval=40, blit=False)
-anim.save("full_pipeline.gif", writer=PillowWriter(fps=25), dpi=72)
+anim.save(out("full_pipeline.gif"), writer=PillowWriter(fps=25), dpi=72)
 print("  [저장] full_pipeline.gif")
 plt.show()
 print("\n[완료] 원하는 자세 → IK → 경로 → 동역학 제어 → 도달, 전 과정 통합.")

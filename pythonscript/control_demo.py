@@ -17,6 +17,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from MyRobotMath import Dynamics
 import ur5_model as ur5
+from paths import out
 
 np.set_printoptions(precision=3, suppress=True)
 
@@ -108,6 +109,6 @@ print(f"  최종 오차 = {np.rad2deg(np.abs(th[-1]-theta_d)).max():.3f}°  (수
 print(f"  정상상태 유지 토크 ≈ {tau[-1]}  N·m")
 
 # 시나리오3 궤적 저장 → (B) 애니메이션에서 사용
-np.savez("pd_trajectory.npz", t=t, theta=th, theta_d=theta_d)
+np.savez(out("pd_trajectory.npz"), t=t, theta=th, theta_d=theta_d)
 print("\n[저장] pd_trajectory.npz  (B 단계 matplotlib 애니메이션용)")
 print("[완료] Unity 없이 순수 Python으로 제어 루프를 닫음.")

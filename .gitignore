@@ -9,7 +9,8 @@ venv/
 .vscode/
 .idea/
 
-# Generated data (trajectories)
+# Generated outputs (demo gif/png/npz)
+outputs/
 *.npz
 
 # Office / 문서 작업 파일

@@ -14,8 +14,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 import ur5_model as ur5
+from paths import out
 
-d = np.load("tracking_trajectory.npz")
+d = np.load(out("tracking_trajectory.npz"))
 t, ref, ct, pd = d["t"], d["theta_ref"], d["theta_ct"], d["theta_pd"]
 
 P_ref = np.array([ur5.fk_all_joints(q) for q in ref])
@@ -48,6 +49,6 @@ def update(i):
 # 용량 절감을 위해 프레임 솎기(매 3번째) — 재생은 충분히 부드러움
 frame_idx = range(0, len(t), 3)
 anim = FuncAnimation(fig, update, frames=frame_idx, interval=40, blit=False)
-anim.save("tracking.gif", writer=PillowWriter(fps=25), dpi=72)
+anim.save(out("tracking.gif"), writer=PillowWriter(fps=25), dpi=72)
 print(f"[저장] tracking.gif  ({len(list(frame_idx))} 프레임)")
 plt.show()
