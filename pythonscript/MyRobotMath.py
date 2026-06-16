@@ -161,27 +161,36 @@ class SE3:
     def log(T_bd):
         """
         log: SE(3) → se(3). 변환행렬 → twist.
+        θ≈0(회전 없음)·θ≈π(sinθ=0) 특이 케이스를 해석적으로 처리하여
+        결정적(deterministic)으로 동작한다. (난수 사용 없음)
         :param T_bd: 4x4 변환행렬
-        :return: (twist*θ, screw(6D), θ(radian))
+        :return: (twist*θ, screw(6D 단위), θ(radian))
         """
         R_bd = T_bd[:3, :3]
         p = T_bd[:3, 3]
-        trace = np.trace(R_bd)
-        cos_theta = np.clip((trace - 1) / 2, -1.0, 1.0)
+        cos_theta = np.clip((np.trace(R_bd) - 1) / 2, -1.0, 1.0)
         theta = np.arccos(cos_theta)
 
-        epsilon = 1e-6
-        if np.abs(theta) < epsilon:
-            # θ≈0 이면 sin(θ)=0 으로 0-division → 작은 노이즈로 회피
-            theta += np.random.normal(0, 0.01)
+        if theta < 1e-10:
+            # 회전 ≈ 0 → 순수 병진. twist = [0, p], θ = ||p||
+            d = np.linalg.norm(p)
+            if d < 1e-12:
+                return np.zeros(6), np.zeros(6), 0.0
+            screw = np.concatenate([np.zeros(3), p / d])
+            return np.concatenate([np.zeros(3), p]), screw, d
 
-        omega_hat = (1 / (2 * np.sin(theta))) * (R_bd - R_bd.T)
-        omega_hat_sq = omega_hat @ omega_hat
-        omega = SO3.vee(omega_hat)
+        if np.abs(theta - np.pi) < 1e-6:
+            # θ≈π → sinθ≈0. R 대각 성분에서 회전축을 안정적으로 추출
+            diag = np.array([R_bd[0, 0], R_bd[1, 1], R_bd[2, 2]])
+            k = int(np.argmax(diag))
+            omega = (R_bd[:, k] + np.eye(3)[:, k]) / np.sqrt(2 * (1 + diag[k]))
+        else:
+            omega = SO3.vee(R_bd - R_bd.T) / (2 * np.sin(theta))
 
+        omega_hat = SO3.hat(omega)
         A_inv = (np.eye(3) / theta
                  - 0.5 * omega_hat
-                 + (1 / theta - 0.5 / np.tan(theta / 2)) * omega_hat_sq)
+                 + (1 / theta - 0.5 / np.tan(theta / 2)) * (omega_hat @ omega_hat))
         v = A_inv @ p
         screw = np.concatenate([omega, v])
         return theta * screw, screw, theta
@@ -344,7 +353,6 @@ class Kinematics:
             # 특이점 감지 및 감쇠 적용
             sigma_min = np.min(np.linalg.svd(J_b, compute_uv=False))
             if sigma_min < 1e-3:
-                print(f"특이점 근접: σ_min={sigma_min:.5f}, damping 적용")
                 J_pseudo = Kinematics.damped_pinv(J_b, damping=0.05)
             else:
                 J_pseudo = Kinematics.damped_pinv(J_b)
@@ -365,6 +373,38 @@ class Kinematics:
                 break
 
         return init, count
+
+    @staticmethod
+    def IK_solutions(robot, desired, seeds=None, atol_deg=1.0):
+        """
+        여러 초기값(seed)에서 NR IK 를 돌려 서로 다른 해를 수집한다.
+        6R 로봇은 한 말단 자세에 대해 IK 해가 여러 개(UR5 최대 8개) 존재 →
+        seed 를 바꿔 다른 가지(elbow up/down, wrist flip 등)를 찾는다.
+        :param robot: 로봇 클래스
+        :param desired: 목표 pose [x, y, z, quaternion]
+        :param seeds: 초기각(degree) 후보 리스트. None 이면 구조적 기본 seed.
+        :param atol_deg: 같은 해로 간주할 각도 허용오차(중복 제거용)
+        :return: 서로 다른 해(degree, np.array)들의 리스트
+        """
+        L = len(robot.joints)
+        if seeds is None:
+            seeds = [[0] * L]
+            for s2 in (-60, 60):              # 어깨
+                for s3 in (-90, 90):          # 팔꿈치 (elbow up/down)
+                    for s5 in (-90, 90):      # 손목 (wrist flip)
+                        seed = [0] * L
+                        seed[1], seed[2], seed[4] = s2, s3, s5
+                        seeds.append(seed)
+
+        sols = []
+        for seed in seeds:
+            sol, count = Kinematics.IK(robot, list(seed), desired)
+            if count >= 50:                   # 미수렴 폐기
+                continue
+            sol = np.asarray(sol, dtype=float)
+            if not any(np.allclose(sol, s, atol=atol_deg) for s in sols):
+                sols.append(sol)
+        return sols
 
 
 # ======================================================================
