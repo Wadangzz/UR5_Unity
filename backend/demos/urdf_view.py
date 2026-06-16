@@ -18,7 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from robot_descriptions.loaders.yourdfpy import load_robot_description
-from paths import out
+from app.core.paths import out
 
 name = sys.argv[1] if len(sys.argv) > 1 else "ur5_description"
 robot = load_robot_description(name)

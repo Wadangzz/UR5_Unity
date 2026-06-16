@@ -2,8 +2,8 @@
 import numpy as np
 from fastapi import HTTPException
 from sqlmodel import Session, select
-import ur5_model as ur5
-from robot_math import SE3
+from app.core import ur5_model as ur5
+from app.core.robot_math import SE3
 from app import sim
 from app.models import Pose
 from app.schemas import RunRequest

@@ -14,9 +14,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import matplotlib.pyplot as plt
-from robot_math import Kinematics, SE3
-import ur5_model as ur5
-from paths import out
+from app.core.robot_math import Kinematics, SE3
+from app.core import ur5_model as ur5
+from app.core.paths import out
 
 np.set_printoptions(precision=1, suppress=True)
 

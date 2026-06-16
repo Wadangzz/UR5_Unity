@@ -17,8 +17,8 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from robot_descriptions.loaders.yourdfpy import load_robot_description
-from robot_math import quintic_time_scaling
-from paths import out
+from app.core.robot_math import quintic_time_scaling
+from app.core.paths import out
 
 robot = load_robot_description("ur5_description")
 

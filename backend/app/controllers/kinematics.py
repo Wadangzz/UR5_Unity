@@ -1,7 +1,7 @@
 """기구학 비즈니스 로직 (IK)."""
 import numpy as np
-import ur5_model as ur5
-from robot_math import SE3
+from app.core import ur5_model as ur5
+from app.core.robot_math import SE3
 from app.schemas import IKRequest, IKResponse
 
 

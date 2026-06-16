@@ -11,7 +11,7 @@ robot_math.Dynamics 와 동일한 MR 컨벤션이므로 그대로 사용 가능.
 """
 
 import numpy as np
-from robot_math import SE3
+from app.core.robot_math import SE3
 
 # --- 링크 좌표계 home 상대변환 (M_{i-1,i}) ---
 M01 = np.array([[1, 0, 0, 0],

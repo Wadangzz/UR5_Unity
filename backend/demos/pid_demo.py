@@ -16,9 +16,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-from robot_math import Dynamics
-import ur5_model as ur5
-from paths import out
+from app.core.robot_math import Dynamics
+from app.core import ur5_model as ur5
+from app.core.paths import out
 
 np.set_printoptions(precision=3, suppress=True)
 ARGS = (ur5.GRAVITY, np.zeros(6), ur5.MLIST, ur5.GLIST, ur5.SLIST)

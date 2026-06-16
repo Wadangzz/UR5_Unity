@@ -12,8 +12,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 
 import numpy as np
-from robot_math import Dynamics, SE3
-import ur5_model as ur5
+from app.core.robot_math import Dynamics, SE3
+from app.core import ur5_model as ur5
 
 np.set_printoptions(precision=3, suppress=True)
 

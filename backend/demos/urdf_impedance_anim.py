@@ -21,9 +21,9 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.integrate import solve_ivp
 from robot_descriptions.loaders.yourdfpy import load_robot_description
-from robot_math import Dynamics
-import ur5_model as ur5
-from paths import out
+from app.core.robot_math import Dynamics
+from app.core import ur5_model as ur5
+from app.core.paths import out
 
 ARGS = (ur5.GRAVITY, np.zeros(6), ur5.MLIST, ur5.GLIST, ur5.SLIST)
 robot = load_robot_description("ur5_description")

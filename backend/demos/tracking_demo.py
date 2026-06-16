@@ -19,9 +19,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from scipy.integrate import solve_ivp
-from robot_math import Dynamics, quintic_time_scaling
-import ur5_model as ur5
-from paths import out
+from app.core.robot_math import Dynamics, quintic_time_scaling
+from app.core import ur5_model as ur5
+from app.core.paths import out
 
 np.set_printoptions(precision=4, suppress=True)
 

@@ -1,6 +1,6 @@
 """로봇 정보 / 제어기 목록 라우터."""
 from fastapi import APIRouter
-import ur5_model as ur5
+from app.core import ur5_model as ur5
 from app import sim
 from app.schemas import ControllerSpec
 

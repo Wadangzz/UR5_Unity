@@ -17,9 +17,9 @@ import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
-from robot_math import Dynamics, Kinematics, SE3, quintic_time_scaling
-import ur5_model as ur5
-from paths import out
+from app.core.robot_math import Dynamics, Kinematics, SE3, quintic_time_scaling
+from app.core import ur5_model as ur5
+from app.core.paths import out
 
 np.set_printoptions(precision=3, suppress=True)
 ARGS = (ur5.GRAVITY, np.zeros(6), ur5.MLIST, ur5.GLIST, ur5.SLIST)

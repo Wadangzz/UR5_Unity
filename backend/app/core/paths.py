@@ -1,7 +1,7 @@
 """
 산출물 경로 헬퍼 — 데모가 만드는 gif/png/npz 를 outputs/ 한곳에 모은다.
 
-  from paths import out
+  from app.core.paths import out
   anim.save(out("demo.gif"))     # → pythonscript/outputs/demo.gif
 
 outputs/ 는 .gitignore 처리되며, import 시 자동 생성된다(없으면).

@@ -5,8 +5,8 @@ robot_math.Dynamics 는 Mlist/Glist/Slist 를 인자로 받으므로, 현재는 
 """
 import numpy as np
 from scipy.integrate import solve_ivp
-from robot_math import Dynamics, quintic_time_scaling
-import ur5_model as ur5
+from app.core.robot_math import Dynamics, quintic_time_scaling
+from app.core import ur5_model as ur5
 
 N = ur5.N
 MODEL = (ur5.MLIST, ur5.GLIST, ur5.SLIST)
