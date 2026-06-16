@@ -76,3 +76,52 @@ def fk_all_joints(theta):
     M_cum = M_cum @ MLIST[N]    # end-effector (M_{0,7})
     points.append((exp_prod @ M_cum)[:3, 3])
     return np.array(points)
+
+
+# ----------------------------------------------------------------------
+#  FK / IK (MR body frame, radian) — 동역학과 같은 컨벤션
+# ----------------------------------------------------------------------
+M_HOME = home_config()                                   # 말단 home 변환 (M_{0,7})
+BLIST = SE3.Adjoint(np.linalg.inv(M_HOME)) @ SLIST       # body screw 축 (6x6)
+
+
+def fk(theta):
+    """말단 변환행렬 T_sb (body form): M · ∏ exp([B_i]θ_i)."""
+    T = M_HOME.copy()
+    for i in range(N):
+        T = T @ SE3.exp6(BLIST[:, i] * theta[i])
+    return T
+
+
+def jacobian_body(theta):
+    """Body Jacobian (6x6)."""
+    Jb = np.zeros((6, N))
+    Jb[:, N - 1] = BLIST[:, N - 1]
+    T = np.eye(4)
+    for i in range(N - 2, -1, -1):
+        T = T @ SE3.exp6(BLIST[:, i + 1] * -theta[i + 1])
+        Jb[:, i] = SE3.Adjoint(T) @ BLIST[:, i]
+    return Jb
+
+
+def ik(T_target, theta0=None, eomg=1e-4, ev=1e-4, max_iter=100):
+    """
+    수치 역기구학 (Newton-Raphson, body frame). 라디안.
+    :param T_target: 목표 말단 변환행렬 (4x4)
+    :param theta0  : 초기 추정 관절각 (rad)
+    :return: (해 관절각, 수렴여부)
+    """
+    def wrap(t):
+        # 각 관절을 [-π, π] 로 정규화 → 같은 말단 자세의 최소 회전 해
+        return np.mod(t + np.pi, 2 * np.pi) - np.pi
+
+    theta = np.zeros(N) if theta0 is None else np.array(theta0, dtype=float)
+    for _ in range(max_iter):
+        T_err = np.linalg.inv(fk(theta)) @ T_target
+        ang = np.arccos(np.clip((np.trace(T_err[:3, :3]) - 1) / 2, -1.0, 1.0))
+        pos = np.linalg.norm(T_err[:3, 3])
+        if ang < eomg and pos < ev:
+            return wrap(theta), True
+        Vb = SE3.log(T_err)[0]                            # body twist 오차
+        theta = theta + np.linalg.pinv(jacobian_body(theta)) @ Vb
+    return wrap(theta), False
