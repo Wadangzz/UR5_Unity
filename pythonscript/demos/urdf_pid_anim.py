@@ -9,6 +9,10 @@ plant=forward_dynamics. 실제 메시 2대를 y로 벌려 렌더(조명 셰이�
 실행:  python urdf_pid_anim.py   (+ outputs/urdf_pid.gif)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors

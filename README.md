@@ -60,16 +60,26 @@ Modern Robotics(screw theory) 기반으로 구현한 동역학 엔진과 제어 
 순동역학을 plant 로 삼아 Python 안에서 제어 루프를 닫는다 (`scipy.solve_ivp` 적분).
 
 ```bash
-# pythonscript 폴더에서
-python gravity_demo.py      # 자세별 중력 토크 g(θ) 계산·물리검증
-python control_demo.py      # 무제어/중력보상/PD+중력보상 비교 + 궤적 저장
-python animate.py           # 위 결과 3D 애니메이션 (ur5_control.gif)
-python tracking_demo.py     # Computed Torque vs PD 궤적추종 비교
-python animate_tracking.py  # 추종 결과 3D 애니메이션 (tracking.gif)
+# pythonscript 폴더에서 (모든 데모는 demos/, 산출물은 outputs/)
+python demos/gravity_demo.py        # 중력 토크 g(θ) 물리검증
+python demos/control_demo.py        # 무제어 / 중력보상 / PD 비교
+python demos/tracking_demo.py       # Computed Torque vs PD 추종
+python demos/pid_demo.py            # PID (I항이 중력 인계)
+python demos/damping_demo.py        # 감쇠비 ζ 효과
+python demos/full_pipeline.py       # 원하는자세 → IK → 경로 → 제어 → 도달
+python demos/multi_waypoint_demo.py # 경유점 순회
+python demos/ik_solutions_demo.py   # 한 자세의 다중 IK 해
+
+# 실제 UR5 URDF 메시 시각화 (yourdfpy, 범용)
+python demos/urdf_view.py           # 정적 (어떤 robot_descriptions 든)
+python demos/urdf_dynamics_anim.py  # 동역학 3막 (낙하 / 중력보상 / CT)
+python demos/urdf_multi_waypoint.py # PID 경유점 순회 (메시)
+python demos/urdf_pid_anim.py       # PD vs PID (메시)
+python demos/urdf_impedance_anim.py # 임피던스 stiff vs soft (메시)
 ```
 
-- `MyRobotMath.py` — `SO3`/`SE3`/`Kinematics`/`Dynamics` (Lie 군·대수 구조로 분리)
-- `ur5_model.py` — UR5 동역학 파라미터 (Mlist/Glist/Slist, SI 단위)
+- `robot_math.py` — `SO3`/`SE3`/`Kinematics`/`Dynamics` (Lie 군·대수 구조로 분리)
+- `robots.py` — UR5 기구학 모델 / `ur5_model.py` — UR5 동역학 파라미터(MR, SI 단위) + FK/IK
 - 상세 설명: [`docs/Inverse_Dynamics.md`](pythonscript/docs/Inverse_Dynamics.md)
 
 ---

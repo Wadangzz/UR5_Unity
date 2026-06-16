@@ -11,6 +11,10 @@ UR5 전체 파이프라인 통합 데모 (순수 Python, Unity 불필요).
 실행:  python full_pipeline.py   (+ full_pipeline.gif 저장)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt

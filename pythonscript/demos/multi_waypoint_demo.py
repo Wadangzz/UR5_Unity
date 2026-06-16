@@ -9,6 +9,10 @@ home → A → B → C → home 을 매끄럽게 오가며 각 별(target)을 �
 실행:  python multi_waypoint_demo.py   (+ multi_waypoint.gif 저장)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt

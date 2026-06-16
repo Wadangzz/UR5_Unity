@@ -11,6 +11,10 @@ plant = robot_math.Dynamics.forward_dynamics, 적분 solve_ivp(RK45).
 실행:  python urdf_dynamics_anim.py   (+ outputs/urdf_dynamics.gif)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors

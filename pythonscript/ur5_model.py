@@ -79,26 +79,6 @@ def home_config():
     return M
 
 
-def fk_all_joints(theta):
-    """
-    각 링크 좌표계 원점의 공간 좌표를 순서대로 반환 (base 포함).
-    시각화에서 팔을 막대로 잇는 데 사용.
-    space frame PoE:  T_{0,i}(θ) = [∏_{j≤i} exp([S_j]θ_j)] · M_{0,i}
-    :param theta: 관절각 (rad, 6개)
-    :return: (8,3) 배열 — base, joint1..6 프레임, end-effector 원점
-    """
-    points = [np.zeros(3)]      # base 원점
-    exp_prod = np.eye(4)        # ∏ exp([S_j]θ_j)
-    M_cum = np.eye(4)           # M_{0,i}
-    for i in range(N):
-        exp_prod = exp_prod @ SE3.exp6(SLIST[:, i] * theta[i])
-        M_cum = M_cum @ MLIST[i]
-        points.append((exp_prod @ M_cum)[:3, 3])
-    M_cum = M_cum @ MLIST[N]    # end-effector (M_{0,7})
-    points.append((exp_prod @ M_cum)[:3, 3])
-    return np.array(points)
-
-
 # ----------------------------------------------------------------------
 #  FK / IK (MR body frame, radian) — 동역학과 같은 컨벤션
 # ----------------------------------------------------------------------

@@ -7,6 +7,10 @@ robot_math.Dynamics.gravity_forces 로 RNE 를 통해 계산한다.
 실행:  python gravity_demo.py
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 from robot_math import Dynamics, SE3
 import ur5_model as ur5

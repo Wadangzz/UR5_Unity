@@ -13,6 +13,10 @@ Computed Torque 로 set-point 제어하면 각 관절 오차가 정확히
 실행:  python damping_demo.py   → damping_response.png 저장
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt

@@ -13,6 +13,10 @@ plant(가상 로봇) = robot_math.Dynamics.forward_dynamics  (순동역학)
 실행:  python control_demo.py   (시나리오3 궤적을 pd_trajectory.npz 로 저장 → 애니메이션용)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 from scipy.integrate import solve_ivp
 from robot_math import Dynamics

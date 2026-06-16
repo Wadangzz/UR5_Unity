@@ -8,6 +8,10 @@
 실행:  python urdf_animate.py   (+ outputs/urdf_motion.gif)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter

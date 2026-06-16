@@ -13,6 +13,10 @@ plant = forward_dynamics, 적분 = solve_ivp(RK45).
 실행:  python tracking_demo.py   → tracking_trajectory.npz 저장(애니메이션용)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 from scipy.integrate import solve_ivp
 from robot_math import Dynamics, quintic_time_scaling

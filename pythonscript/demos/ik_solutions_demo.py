@@ -8,6 +8,10 @@ Kinematics.IK_solutions 로 그 해들을 모아, 모두 같은 목표(빨간 �
 실행:  python ik_solutions_demo.py   (+ ik_solutions.png 저장)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from robot_math import Kinematics, SE3

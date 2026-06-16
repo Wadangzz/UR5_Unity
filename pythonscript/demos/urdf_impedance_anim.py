@@ -10,6 +10,10 @@ J는 fk 의 수치 미분(3x6), plant=forward_dynamics.
 실행:  python urdf_impedance_anim.py   (+ outputs/urdf_impedance.gif)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors

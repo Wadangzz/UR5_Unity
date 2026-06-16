@@ -9,6 +9,10 @@ plant = robot_math.Dynamics.forward_dynamics. 적분상태 ∫e 를 상태에 �
 실행:  python pid_demo.py   (+ outputs/pid_response.png)
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt

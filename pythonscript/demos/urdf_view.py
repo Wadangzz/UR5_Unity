@@ -9,6 +9,10 @@ Franka, KUKA, 커스텀 URDF 등 그대로 적용 가능. 메시는 matplotlib(P
 예:    python urdf_view.py panda_description
 """
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
