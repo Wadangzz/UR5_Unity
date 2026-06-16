@@ -1,10 +1,10 @@
 import sys, socket, json, time, sqlite3
 import trajectorysqlite as ts
-import Robot
+import robots
 import threading
 import UR5_task
-import MyRobotMath as math
-from MyRobotMath import SE3
+import robot_math as math
+from robot_math import SE3
 from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox
 from MyQT import Ui_MainWindow
 
@@ -288,7 +288,7 @@ class MyApp(QMainWindow):
 if __name__ == '__main__':
 
     se3 = SE3()
-    ur5 = Robot.UR5()
+    ur5 = robots.UR5()
 
     M = ur5.zero
     B = ur5.B_tw

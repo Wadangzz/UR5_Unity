@@ -1,15 +1,15 @@
 import numpy as np
-import Robot
+import robots
 import socket
 import json
 import threading
 import time
-import MyRobotMath as math
+import robot_math as math
 
 HOST = '127.0.0.1'
 PORT = 5000
 
-ur5 = Robot.UR5()
+ur5 = robots.UR5()
 M = ur5.zero
 L = len(ur5.joints)
 

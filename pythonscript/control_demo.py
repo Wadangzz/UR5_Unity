@@ -1,7 +1,7 @@
 """
 UR5 제어 데모 — Unity 없이 순수 Python으로 닫는 제어 루프.
 
-plant(가상 로봇) = MyRobotMath.Dynamics.forward_dynamics  (순동역학)
+plant(가상 로봇) = robot_math.Dynamics.forward_dynamics  (순동역학)
 제어기            = 토크 τ 를 계산하는 함수
 
 세 시나리오로 동역학+제어를 보여준다:
@@ -15,7 +15,7 @@ plant(가상 로봇) = MyRobotMath.Dynamics.forward_dynamics  (순동역학)
 
 import numpy as np
 from scipy.integrate import solve_ivp
-from MyRobotMath import Dynamics
+from robot_math import Dynamics
 import ur5_model as ur5
 from paths import out
 

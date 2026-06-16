@@ -2,7 +2,7 @@
 UR5 제어 결과 3D 애니메이션 (matplotlib).
 
 control_demo.py 가 저장한 pd_trajectory.npz (PD+중력보상 궤적)를 읽어,
-fk_all_joints 로 각 관절 위치를 계산해 팔을 막대로 그려 움직임을 보여준다.
+fk_skeleton 로 각 관절 위치를 계산해 팔을 막대로 그려 움직임을 보여준다.
 목표 자세는 회색 고스트로 함께 표시 → 수렴 과정을 눈으로 확인.
 
 실행:  python animate.py          (대화형 창으로 재생)
@@ -20,8 +20,8 @@ data = np.load(out("pd_trajectory.npz"))
 t, theta, theta_d = data["t"], data["theta"], data["theta_d"]
 
 # 프레임별 관절 위치 (F, 8, 3) 및 목표 자세
-frames = np.array([ur5.fk_all_joints(th) for th in theta])
-target = ur5.fk_all_joints(theta_d)
+frames = np.array([ur5.fk_skeleton(th) for th in theta])
+target = ur5.fk_skeleton(theta_d)
 
 # --- 3D 플롯 셋업 ---
 fig = plt.figure(figsize=(7, 7))

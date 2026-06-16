@@ -1,6 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
-from MyRobotMath import SE3
+from robot_math import SE3
 
 
 @dataclass

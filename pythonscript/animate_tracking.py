@@ -19,9 +19,9 @@ from paths import out
 d = np.load(out("tracking_trajectory.npz"))
 t, ref, ct, pd = d["t"], d["theta_ref"], d["theta_ct"], d["theta_pd"]
 
-P_ref = np.array([ur5.fk_all_joints(q) for q in ref])
-P_ct = np.array([ur5.fk_all_joints(q) for q in ct])
-P_pd = np.array([ur5.fk_all_joints(q) for q in pd])
+P_ref = np.array([ur5.fk_skeleton(q) for q in ref])
+P_ct = np.array([ur5.fk_skeleton(q) for q in ct])
+P_pd = np.array([ur5.fk_skeleton(q) for q in pd])
 
 fig = plt.figure(figsize=(7, 7))
 ax = fig.add_subplot(111, projection="3d")

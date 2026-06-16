@@ -13,7 +13,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
-from MyRobotMath import Dynamics, Kinematics, SE3, quintic_time_scaling
+from robot_math import Dynamics, Kinematics, SE3, quintic_time_scaling
 import ur5_model as ur5
 from paths import out
 
@@ -80,7 +80,7 @@ theta_log = sol.y[:6].T
 print(f"\n총 {N_SEG}구간, {T_TOTAL:.1f}s 순회 완료. 프레임 {len(t_eval)}개")
 
 # --- 애니메이션 ---
-frames = np.array([ur5.fk_all_joints(q) for q in theta_log])
+frames = np.array([ur5.fk_skeleton(q) for q in theta_log])
 fig = plt.figure(figsize=(7, 7))
 ax = fig.add_subplot(111, projection="3d")
 ax.view_init(elev=18, azim=48)

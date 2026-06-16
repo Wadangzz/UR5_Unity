@@ -15,7 +15,7 @@ plant = forward_dynamics, 적분 = solve_ivp(RK45).
 
 import numpy as np
 from scipy.integrate import solve_ivp
-from MyRobotMath import Dynamics, quintic_time_scaling
+from robot_math import Dynamics, quintic_time_scaling
 import ur5_model as ur5
 from paths import out
 

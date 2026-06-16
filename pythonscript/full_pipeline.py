@@ -15,7 +15,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
-from MyRobotMath import Dynamics, Kinematics, SE3, quintic_time_scaling
+from robot_math import Dynamics, Kinematics, SE3, quintic_time_scaling
 import ur5_model as ur5
 from paths import out
 
@@ -110,8 +110,8 @@ print(f"  목표 대비 도달 오차    = {np.linalg.norm(p_final - p_des)*1000
 # ⑤ 3D 애니메이션
 # ====================================================================
 banner("⑤ 시각화 (3D 애니메이션)")
-frames = np.array([ur5.fk_all_joints(q) for q in theta_log])
-goal_arm = ur5.fk_all_joints(theta_goal)
+frames = np.array([ur5.fk_skeleton(q) for q in theta_log])
+goal_arm = ur5.fk_skeleton(theta_goal)
 
 fig = plt.figure(figsize=(7, 7))
 ax = fig.add_subplot(111, projection="3d")

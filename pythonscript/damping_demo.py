@@ -16,7 +16,7 @@ Computed Torque 로 set-point 제어하면 각 관절 오차가 정확히
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-from MyRobotMath import Dynamics
+from robot_math import Dynamics
 import ur5_model as ur5
 from paths import out
 

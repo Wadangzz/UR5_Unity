@@ -10,7 +10,7 @@ Kinematics.IK_solutions 로 그 해들을 모아, 모두 같은 목표(빨간 �
 
 import numpy as np
 import matplotlib.pyplot as plt
-from MyRobotMath import Kinematics, SE3
+from robot_math import Kinematics, SE3
 import ur5_model as ur5
 from paths import out
 
@@ -31,7 +31,7 @@ for i, sol in enumerate(sols):
     print(f"  해{i+1}: {sol}  | 말단오차 {np.linalg.norm(p - p_des):.1e} m")
 
 # --- 3D 시각화: 모든 해를 한 화면에 ---
-arms = [ur5.fk_all_joints(np.deg2rad(sol)) for sol in sols]
+arms = [ur5.fk_skeleton(np.deg2rad(sol)) for sol in sols]
 allpts = np.concatenate(arms, axis=0)
 
 fig = plt.figure(figsize=(8, 8))

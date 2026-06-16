@@ -2,13 +2,13 @@
 UR5 중력보상 데모 — 정지 자세를 버티는 데 필요한 관절 토크 g(θ) 계산.
 
 중력 토크는 질량 + 무게중심만으로 결정되며(관성텐서 무관),
-MyRobotMath.Dynamics.gravity_forces 로 RNE 를 통해 계산한다.
+robot_math.Dynamics.gravity_forces 로 RNE 를 통해 계산한다.
 
 실행:  python gravity_demo.py
 """
 
 import numpy as np
-from MyRobotMath import Dynamics, SE3
+from robot_math import Dynamics, SE3
 import ur5_model as ur5
 
 np.set_printoptions(precision=3, suppress=True)

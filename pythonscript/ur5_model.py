@@ -3,7 +3,7 @@ UR5 동역학 모델 데이터 (Modern Robotics 표준 파라미터).
 
 단위: 길이 m, 질량 kg, 시간 s (SI) → 토크는 N·m 로 나온다.
 출처: Modern Robotics (Lynch & Park), UR5 예제.
-MyRobotMath.Dynamics 와 동일한 MR 컨벤션이므로 그대로 사용 가능.
+robot_math.Dynamics 와 동일한 MR 컨벤션이므로 그대로 사용 가능.
 
     Mlist : 링크 좌표계 home 상대변환 M_{i-1,i}  (n+1 = 7 개)
     Glist : 링크별 공간관성 G_i = diag(Ixx, Iyy, Izz, m, m, m)  (n = 6 개)
@@ -11,7 +11,7 @@ MyRobotMath.Dynamics 와 동일한 MR 컨벤션이므로 그대로 사용 가능
 """
 
 import numpy as np
-from MyRobotMath import SE3
+from robot_math import SE3
 
 # --- 링크 좌표계 home 상대변환 (M_{i-1,i}) ---
 M01 = np.array([[1, 0, 0, 0],
@@ -104,6 +104,26 @@ def fk_all_joints(theta):
 # ----------------------------------------------------------------------
 M_HOME = home_config()                                   # 말단 home 변환 (M_{0,7})
 BLIST = SE3.Adjoint(np.linalg.inv(M_HOME)) @ SLIST       # body screw 축 (6x6)
+
+
+def fk_skeleton(theta):
+    """
+    실제 관절축 위치 기준 스켈레톤 (시각화용).
+    각 관절 screw 축 위의 기준점(원점에서의 수선의 발 q = ω×v)을 앞선 관절들의
+    운동으로 변환해 잇는다 → fk_all_joints(MLIST 프레임 원점)보다 실제 UR5
+    링크 구조(어깨·팔꿈치·손목 오프셋)에 가깝다.
+    :param theta: 관절각 (rad, 6개)
+    :return: (8,3) — base, J1..J6 축점, TCP(말단)
+    """
+    pts = [np.zeros(3)]                         # base
+    prod = np.eye(4)                            # ∏_{j<i} exp([S_j]θ_j)
+    for i in range(N):
+        w, v = SLIST[:3, i], SLIST[3:, i]
+        q = np.cross(w, v)                      # 관절 i 축 위의 기준점 (home)
+        pts.append((prod @ np.append(q, 1.0))[:3])
+        prod = prod @ SE3.exp6(SLIST[:, i] * theta[i])
+    pts.append((prod @ M_HOME)[:3, 3])          # TCP
+    return np.array(pts)
 
 
 def fk(theta):
