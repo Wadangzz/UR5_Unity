@@ -3,8 +3,8 @@ import json
 import socket
 import time
 import threading
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
     QWidget, QSlider, QLabel, QVBoxLayout, QApplication, 
     QHBoxLayout, QComboBox, QPushButton, QTableWidget, 
     QTableWidgetItem, QGridLayout)
@@ -120,4 +120,4 @@ if __name__ == '__main__':
         app = QApplication(sys.argv)
         window = DragUI(s)
         window.show()
-        sys.exit(app.exec_())
+        sys.exit(app.exec())

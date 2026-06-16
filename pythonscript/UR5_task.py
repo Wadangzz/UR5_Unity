@@ -29,8 +29,8 @@ def receive_loop(sock):
                 data = json.loads(line.strip())
                 # print("[DATA]", data)
                 init = data['joints']
-                matexps_b = [se3.matexp(init[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
-                T_init = se3.matFK(M,matexps_b)
+                matexps_b = [se3.exp(init[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
+                T_init = se3.compose(M,matexps_b)
                 initpos = data['position'] + data['rotation']
                 # initpos = data['position'] + data['rotation']
             except json.JSONDecodeError:
@@ -45,7 +45,7 @@ def trajectory(init,initpos,desired,N):
 
     for i in range(len(X_s)):
         x0, y0 ,z0 = X_s[i][:3,3].flatten()
-        quat,_ = se3.CurrentQuaternion(X_s[i])
+        quat,_ = se3.orientation(X_s[i])
         pos_d = [x0, y0, z0] + quat
         theta,count = math.IK(ur5,current,pos_d)
         # task trajectoy 발산할 때 or elbow down 자세일 때 joint trajectory로 전환
@@ -110,7 +110,7 @@ if __name__ == "__main__":
 
             for i in range(len(X_s)):
                 x0, y0 ,z0 = X_s[i][:3,3].flatten()
-                quat = se3.CurrentQuaternion(X_s[i])
+                quat,_ = se3.orientation(X_s[i])
                 pos_d = [x0, y0, z0] + quat
                 theta,count = math.IK(ur5,current,pos_d)
                 # task trajectoy 발산할 때 or elbow down 자세일 때 joint trajectory로 전환

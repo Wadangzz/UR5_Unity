@@ -5,7 +5,7 @@ import threading
 import UR5_task
 import MyRobotMath as math
 from MyRobotMath import SE3
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox
 from MyQT import Ui_MainWindow
 
 class MyApp(QMainWindow):
@@ -201,9 +201,9 @@ class MyApp(QMainWindow):
             
             # 업데이트 상태를 다음 단계 기준으로 갱신
             current_joint = trajectory[-1]
-            matexps_b = [se3.matexp(j, B[i], joint=ur5.joints[i].type) for i, j in enumerate(current_joint)]
-            T = se3.matFK(M, matexps_b)
-            current_pose = T[:3, 3].tolist() + se3.CurrentQuaternion(T)[0]
+            matexps_b = [se3.exp(j, B[i], joint=ur5.joints[i].type) for i, j in enumerate(current_joint)]
+            T = se3.compose(M, matexps_b)
+            current_pose = T[:3, 3].tolist() + se3.orientation(T)[0]
 
     def connect_joint_sliders(self):
         for name, slider in self.joint_sliders.items():
@@ -219,10 +219,10 @@ class MyApp(QMainWindow):
             val = self.joint_sliders[name].value() * 0.01
             self.joint_labels[name].setText(f"{val:.2f}")
             angle.append(val)
-        matexps_b = [se3.matexp(angle[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
-        T = se3.matFK(M, matexps_b)
+        matexps_b = [se3.exp(angle[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
+        T = se3.compose(M, matexps_b)
         x, y, z = T[:3,3].flatten()
-        _, euler = se3.CurrentQuaternion(T)
+        _, euler = se3.orientation(T)
         pos = [x, y, z] + euler
         for i, name in enumerate(self.axis_sliders):
             self.axis_sliders[name].blockSignals(True)
@@ -245,7 +245,7 @@ class MyApp(QMainWindow):
                 self.axis_labels[name].setText(f"{val:.2f}")
                 pos.append(val)
 
-            desired = se3.euler_to_quat(pos)
+            desired = se3.pose_euler_to_quat(pos)
             pose,_ = math.IK(ur5,init,desired)
 
             for i, name in enumerate(self.joint_sliders):
@@ -278,8 +278,8 @@ class MyApp(QMainWindow):
                     data = json.loads(line.strip())
                     # print("[DATA]", data)
                     init = data['joints']
-                    matexps_b = [se3.matexp(init[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
-                    # T_init = se3.matFK(M,matexps_b)
+                    matexps_b = [se3.exp(init[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
+                    # T_init = se3.compose(M,matexps_b)
                     initpos = data['position'] + data['rotation']
                 except json.JSONDecodeError:
                     # JSON 파싱 실패 시 경고 출력
@@ -300,4 +300,4 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = MyApp()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

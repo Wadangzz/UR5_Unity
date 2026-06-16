@@ -4,8 +4,6 @@ from MyRobotMath import SE3
 from scipy.spatial.transform import Rotation as R
 
 
-se3 = SE3()
-
 @dataclass
 class JointSpec:
     type: str  # 'R' or 'P'
@@ -91,7 +89,7 @@ class SCARA:
                      [0, 0, 0, 0, 0, 1],
                      [0, 0, 1, 0, 0, 0]]
         
-        self.S_tw = (se3.adjoint(self.zero) @ np.array(self.B_tw).T).T.tolist()
+        self.S_tw = (SE3.Adjoint(self.zero) @ np.array(self.B_tw).T).T.tolist()
 
     def update_angles(self, angles):
         current_point = np.array([0, 0, 0])
@@ -147,7 +145,7 @@ class BarretWAM:
                      [0, 1, 0, L3, 0, 0],
                      [0, 0, 1, 0, 0, 0]]
 
-        self.S_tw = (se3.adjoint(self.zero) @ np.array(self.B_tw).T).T.tolist()
+        self.S_tw = (SE3.Adjoint(self.zero) @ np.array(self.B_tw).T).T.tolist()
 
 class UR5:
     
@@ -175,4 +173,4 @@ class UR5:
                      [0, 0, 1, 0, L8, 0],
                      [1, 0, 0, 0, 0, 0]]
 
-        self.S_tw = (se3.adjoint(self.zero) @ np.array(self.B_tw).T).T.tolist()
+        self.S_tw = (SE3.Adjoint(self.zero) @ np.array(self.B_tw).T).T.tolist()

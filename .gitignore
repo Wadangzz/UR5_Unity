@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Generated artifacts
+pythonscript/pd_trajectory.npz

@@ -57,8 +57,8 @@ while True:
         end[1] = end[1] -np.rad2deg(2*np.arctan2(k_2,k_1))
         end[3] = phi-(end[1]+end[2])
 
-    matexps_b = [se3.matexp(end[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
-    T_d = se3.matFK(M, matexps_b)
+    matexps_b = [se3.exp(end[i], B[i], joint=ur5.joints[i].type) for i in range(L)]
+    T_d = se3.compose(M, matexps_b)
 
     print(se3.CurrenntAngles(T_d))
 
