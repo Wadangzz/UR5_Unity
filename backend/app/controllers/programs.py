@@ -28,3 +28,10 @@ def reset_program(session: Session, program_id: str):
     for p in session.exec(select(Pose).where(Pose.program_id == program_id)).all():
         session.delete(p)
     session.commit()
+
+
+def delete_pose(session: Session, pose_id: int):
+    p = session.get(Pose, pose_id)
+    if p:
+        session.delete(p)
+        session.commit()

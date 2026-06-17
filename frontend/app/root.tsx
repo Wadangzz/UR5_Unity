@@ -26,6 +26,8 @@ export default function App() {
   const [controllers, setControllers] = useState<ControllerSpec[]>([]);
   const [controller, setController] = useState('computed_torque');
   const [gains, setGains] = useState<Record<string, number>>({});
+  const [autoTune, setAutoTune] = useState(false);
+  const [targetTs, setTargetTs] = useState(0.6); // 목표 정착시간(s)
   const [payload, setPayload] = useState(0);
   const [modelScale, setModelScale] = useState(1);
   const [running, setRunning] = useState(false);
@@ -37,14 +39,33 @@ export default function App() {
       .then(setControllers)
       .catch(() => {});
   }, []);
-  // 제어기 바뀌면 해당 제어기 기본 게인으로 초기화
+  // 게인 결정: 자동(극배치)이면 목표 정착시간에서 계산, 수동이면 제어기 기본값.
+  // 극배치(ζ=1 임계, 2% 정착 ts≈4/(ζ·ωn)): ωn=4/ts → Kp=ωn², Kd=2ωn.
+  // Ki(있으면)는 안정한계 Ki<Kp·Kd 내 안전값(0.3·Kp·Kd).
   useEffect(() => {
     const spec = controllers.find((c) => c.name === controller);
     if (!spec) return;
     const g: Record<string, number> = {};
-    spec.params.forEach((p) => (g[p.key] = p.default));
+    if (autoTune) {
+      const wn = 4 / targetTs;
+      const kp = wn * wn;
+      const kd = 2 * wn;
+      spec.params.forEach((p) => {
+        const v =
+          p.key === 'kp'
+            ? kp
+            : p.key === 'kd'
+              ? kd
+              : p.key === 'ki'
+                ? 0.3 * kp * kd
+                : p.default;
+        g[p.key] = Math.min(p.max, Math.max(p.min, v));
+      });
+    } else {
+      spec.params.forEach((p) => (g[p.key] = p.default));
+    }
     setGains(g);
-  }, [controller, controllers]);
+  }, [controller, controllers, autoTune, targetTs]);
   const setGain = (key: string, value: number) =>
     setGains((prev) => ({ ...prev, [key]: value }));
   // 언마운트 시 재생 루프 정리
@@ -130,6 +151,10 @@ export default function App() {
           onControllerChange={setController}
           gains={gains}
           onGainChange={setGain}
+          autoTune={autoTune}
+          onAutoTuneChange={setAutoTune}
+          targetTs={targetTs}
+          onTargetTsChange={setTargetTs}
           payload={payload}
           onPayloadChange={setPayload}
           modelScale={modelScale}

@@ -95,3 +95,5 @@ export const savePose = (id: string, pose: number[], theta: number[]) => {
 };
 export const resetProgram = (id: string) =>
   http.delete(`/programs/${id}`).then((r) => r.data);
+export const deletePose = (id: string, poseId: number) =>
+  http.delete(`/programs/${id}/poses/${poseId}`).then((r) => r.data);

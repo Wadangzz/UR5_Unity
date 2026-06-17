@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { fk, savePose, getProgram, resetProgram, type Pose } from '@/api';
+import {
+  fk,
+  savePose,
+  getProgram,
+  resetProgram,
+  deletePose,
+  type Pose,
+} from '@/api';
 
 const PID = 'default';
 
@@ -38,11 +45,15 @@ export default function ProgramList({ joints, onRunProgram, running }: Props) {
     await resetProgram(PID);
     await refresh();
   };
+  const del = async (poseId: number) => {
+    await deletePose(PID, poseId);
+    await refresh();
+  };
 
   return (
     <Card className='bg-card/95 supports-[backdrop-filter]:bg-card/80 w-60 backdrop-blur'>
       <CardHeader className='pb-3'>
-        <CardTitle className='text-sm'>프로그램 (티치)</CardTitle>
+        <CardTitle className='text-sm'>프로그램 (Teaching)</CardTitle>
       </CardHeader>
       <CardContent className='space-y-3'>
         <ol className='max-h-32 space-y-1 overflow-y-auto text-xs'>
@@ -50,11 +61,23 @@ export default function ProgramList({ joints, onRunProgram, running }: Props) {
             <li className='text-muted-foreground'>저장된 포즈 없음</li>
           )}
           {poses.map((p, i) => (
-            <li key={p.id} className='flex justify-between tabular-nums'>
+            <li
+              key={p.id}
+              className='flex items-center justify-between gap-2 tabular-nums'
+            >
               <span className='text-muted-foreground'>P{i + 1}</span>
-              <span>
+              <span className='flex-1 text-right'>
                 ({p.x.toFixed(2)}, {p.y.toFixed(2)}, {p.z.toFixed(2)})
               </span>
+              <button
+                type='button'
+                onClick={() => del(p.id)}
+                disabled={running}
+                className='text-muted-foreground hover:text-red-600 disabled:opacity-40'
+                aria-label='삭제'
+              >
+                ×
+              </button>
             </li>
           ))}
         </ol>

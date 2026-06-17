@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import type { ControllerSpec, JointMeta } from '@/api';
 
 interface Props {
@@ -21,6 +22,10 @@ interface Props {
   onControllerChange: (value: string) => void;
   gains: Record<string, number>;
   onGainChange: (key: string, value: number) => void;
+  autoTune: boolean;
+  onAutoTuneChange: (on: boolean) => void;
+  targetTs: number;
+  onTargetTsChange: (value: number) => void;
   payload: number;
   onPayloadChange: (value: number) => void;
   modelScale: number;
@@ -60,6 +65,10 @@ export default function ControlPanel({
   onControllerChange,
   gains,
   onGainChange,
+  autoTune,
+  onAutoTuneChange,
+  targetTs,
+  onTargetTsChange,
   payload,
   onPayloadChange,
   modelScale,
@@ -117,7 +126,41 @@ export default function ControlPanel({
             </Select>
           </div>
 
-          {/* 제어기별 게인 슬라이더 */}
+          {/* 자동 튜닝 토글 */}
+          <div className='flex items-center justify-between'>
+            <Label className='text-muted-foreground text-xs'>
+              자동 튜닝 (극배치)
+            </Label>
+            <Switch
+              checked={autoTune}
+              onCheckedChange={onAutoTuneChange}
+              disabled={running}
+            />
+          </div>
+
+          {/* 자동: 목표 정착시간 슬라이더 (게인은 자동 계산) */}
+          {autoTune && (
+            <div className='space-y-1.5'>
+              <div className='flex items-center justify-between'>
+                <Label className='text-muted-foreground text-xs'>
+                  목표 정착시간
+                </Label>
+                <span className='text-xs tabular-nums'>
+                  {targetTs.toFixed(2)}s
+                </span>
+              </div>
+              <Slider
+                min={0.2}
+                max={1.5}
+                step={0.05}
+                value={[targetTs]}
+                disabled={running}
+                onValueChange={([v]) => onTargetTsChange(v)}
+              />
+            </div>
+          )}
+
+          {/* 제어기별 게인 슬라이더 (자동 모드면 계산값 표시·잠금) */}
           {spec?.params.map((p) => (
             <div key={p.key} className='space-y-1.5'>
               <div className='flex items-center justify-between'>
@@ -133,7 +176,7 @@ export default function ControlPanel({
                 max={p.max}
                 step={1}
                 value={[gains[p.key] ?? p.default]}
-                disabled={running}
+                disabled={running || autoTune}
                 onValueChange={([v]) => onGainChange(p.key, v)}
               />
             </div>

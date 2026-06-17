@@ -24,6 +24,12 @@ def add_pose(program_id: str, body: PoseIn, session: Session = Depends(get_sessi
     return ctrl.add_pose(session, program_id, body)
 
 
+@router.delete("/{program_id}/poses/{pose_id}")
+def delete_pose(program_id: str, pose_id: int, session: Session = Depends(get_session)):
+    ctrl.delete_pose(session, pose_id)
+    return {"ok": True, "pose_id": pose_id}
+
+
 @router.delete("/{program_id}")
 def reset_program(program_id: str, session: Session = Depends(get_session)):
     ctrl.reset_program(session, program_id)
