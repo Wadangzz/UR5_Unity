@@ -44,7 +44,8 @@ interface Props {
 
 /**
  * /api/robot 에서 urdf_url·packages 를 받아 urdf-loader 로 UR5 메시를 로드한다.
- * - URDF 는 Z-up → three(Y-up) 씬에 맞추려 부모에서 -90°(X) 회전해 세운다.
+ * - 씬을 Z-up(camera.up=+Z)으로 두므로 URDF(Z-up)를 회전 없이 그대로 쓴다
+ *   → 월드축 = 로봇 베이스축 = PoseEditor 직교축 일치.
  * - joints prop 이 바뀌면 setJointValues 로 브라우저에서 즉시 FK (백엔드 왕복 0).
  */
 export default function RobotView({ joints, onLoaded }: Props) {
@@ -101,5 +102,5 @@ export default function RobotView({ joints, onLoaded }: Props) {
 
   if (error) throw new Error(error);
   if (!robot) return null;
-  return <primitive object={robot} rotation={[-Math.PI / 2, 0, 0]} />;
+  return <primitive object={robot} />;
 }

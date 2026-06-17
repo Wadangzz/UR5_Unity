@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Grid } from '@react-three/drei';
+import {
+  OrbitControls,
+  Grid,
+  GizmoHelper,
+  GizmoViewport,
+} from '@react-three/drei';
 import RobotView from '@/components/RobotView';
 import ControlPanel from '@/components/ControlPanel';
 import PoseEditor from '@/components/PoseEditor';
@@ -147,18 +152,33 @@ export default function App() {
         <Plots result={result} />
       </div>
 
-      <Canvas camera={{ position: [1.4, 1.1, 1.4], fov: 50 }} shadows>
-        <ambientLight intensity={0.7} />
-        <directionalLight position={[5, 10, 5]} intensity={1.2} castShadow />
-        <directionalLight position={[-5, 5, -5]} intensity={0.4} />
+      <Canvas
+        flat
+        camera={{ position: [1.3, -1.3, 0.9], up: [0, 0, 1], fov: 50 }}
+        shadows
+      >
+        {/* flat = 톤매핑 끔(어두운 재질이 검게 뭉개지는 것 방지).
+            어두운 관절부가 보이도록 ambient↑ + hemisphere + 다방향 필라이트 */}
+        <ambientLight intensity={1.0} />
+        <hemisphereLight
+          intensity={0.8}
+          color='#ffffff'
+          groundColor='#777777'
+        />
+        <directionalLight position={[4, -4, 8]} intensity={1.6} castShadow />
+        <directionalLight position={[-5, 4, 4]} intensity={0.9} />
+        <directionalLight position={[0, 6, 2]} intensity={0.5} />
+        <directionalLight position={[0, -5, -2]} intensity={0.4} />
 
         <RobotView joints={joints} onLoaded={handleLoaded} />
 
-        {/* 로봇 베이스 프레임 좌표축 (X 빨강·Y 초록·Z 파랑/위), URDF Z-up 정렬 */}
-        <axesHelper args={[0.4]} rotation={[-Math.PI / 2, 0, 0]} />
+        {/* 로봇 베이스 프레임 좌표축 (Z-up: X 빨강·Y 초록·Z 파랑) */}
+        <axesHelper args={[0.4]} />
 
+        {/* 바닥 그리드 (XY 평면, Z=0) */}
         <Grid
           args={[10, 10]}
+          rotation={[Math.PI / 2, 0, 0]}
           cellSize={0.1}
           cellThickness={0.6}
           sectionSize={0.5}
@@ -168,7 +188,16 @@ export default function App() {
           cellColor='#d4d4d4'
           sectionColor='#a3a3a3'
         />
-        <OrbitControls target={[0, 0.4, 0]} enableDamping />
+
+        {/* 좌측 하단 XYZ 축 기즈모 (라벨) */}
+        <GizmoHelper alignment='bottom-left' margin={[80, 80]}>
+          <GizmoViewport
+            axisColors={['#ef4444', '#10b981', '#3b82f6']}
+            labelColor='black'
+          />
+        </GizmoHelper>
+
+        <OrbitControls target={[0, 0, 0.4]} enableDamping makeDefault />
       </Canvas>
     </div>
   );

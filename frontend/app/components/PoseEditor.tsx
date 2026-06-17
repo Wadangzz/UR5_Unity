@@ -34,21 +34,21 @@ const FIELDS: {
     k: 'rx',
     label: 'RX',
     unit: '°',
-    step: 0.1,
+    step: 0.5,
     color: 'text-muted-foreground',
   },
   {
     k: 'ry',
     label: 'RY',
     unit: '°',
-    step: 0.1,
+    step: 0.5,
     color: 'text-muted-foreground',
   },
   {
     k: 'rz',
     label: 'RZ',
     unit: '°',
-    step: 0.1,
+    step: 0.5,
     color: 'text-muted-foreground',
   },
 ];
@@ -65,44 +65,42 @@ const toPose7 = (p: Pose6): number[] => {
   return [p.x, p.y, p.z, q.x, q.y, q.z, q.w];
 };
 
+const fromPose7 = (pose: number[]): Pose6 => {
+  const e = new Euler().setFromQuaternion(
+    new Quaternion(pose[3], pose[4], pose[5], pose[6]),
+    'XYZ',
+  );
+  return {
+    x: pose[0],
+    y: pose[1],
+    z: pose[2],
+    rx: MathUtils.radToDeg(e.x),
+    ry: MathUtils.radToDeg(e.y),
+    rz: MathUtils.radToDeg(e.z),
+  };
+};
+
 /**
- * 직교 6-DOF 목표(X,Y,Z + RX,RY,RZ) → 라이브 IK → 관절각 반영.
- * 폭주·경합 방지: 동시에 IK 요청 1개만(in-flight 가드), 진행 중 변경은
- * 최신값만 남겼다가 응답 후 1번 더 발사(trailing) → 항상 최신으로 수렴.
+ * 직교 6-DOF(X,Y,Z + RX,RY,RZ) ↔ 관절각 양방향 연동.
+ * - 정방향: joints 변경 → 디바운스 FK → 필드 표시 갱신 (jog·Run 결과 반영).
+ * - 역방향: 필드 편집 → 라이브 IK → 관절각 반영 (onChange 에서만 트리거).
+ * IK 를 effect 가 아니라 편집에서만 트리거 → running 변화로 stale 타깃이
+ * 재적용되는 버그 없음. FK 동기화는 재생 중·IK 중·방금 편집(400ms) 중이면 건너뜀.
  */
 export default function PoseEditor({ joints, onSolved, running }: Props) {
   const [pose, setPose] = useState<Pose6 | null>(null);
   const [status, setStatus] = useState('');
 
-  const latest = useRef<number[] | null>(null); // 마지막 목표 pose7
+  const latest = useRef<number[] | null>(null); // 마지막 IK 목표 pose7
   const inFlight = useRef(false);
+  const editedAt = useRef(0); // 마지막 사용자 편집 시각(ms)
   const jointsRef = useRef(joints);
   jointsRef.current = joints;
   const onSolvedRef = useRef(onSolved);
   onSolvedRef.current = onSolved;
 
-  // 최초 1회 현재 자세(위치+Euler)로 시드
-  useEffect(() => {
-    if (joints.length && !pose) {
-      fk(joints).then((r) => {
-        const e = new Euler().setFromQuaternion(
-          new Quaternion(r.pose[3], r.pose[4], r.pose[5], r.pose[6]),
-          'XYZ',
-        );
-        setPose({
-          x: r.pose[0],
-          y: r.pose[1],
-          z: r.pose[2],
-          rx: MathUtils.radToDeg(e.x),
-          ry: MathUtils.radToDeg(e.y),
-          rz: MathUtils.radToDeg(e.z),
-        });
-      });
-    }
-  }, [joints, pose]);
-
-  const pumpRef = useRef<() => void>(() => {});
-  pumpRef.current = async () => {
+  const pump = useRef<() => void>(() => {});
+  pump.current = async () => {
     if (inFlight.current) return;
     const target = latest.current;
     if (!target) return;
@@ -116,19 +114,46 @@ export default function PoseEditor({ joints, onSolved, running }: Props) {
       setStatus('오류');
     } finally {
       inFlight.current = false;
-      if (latest.current) pumpRef.current(); // 진행 중 들어온 최신 목표를 1번 더 (trailing)
+      if (latest.current) pump.current(); // trailing: 진행 중 들어온 최신 목표
     }
   };
 
-  // pose 변경 시 라이브 IK (in-flight 가드가 폭주·경합 차단)
+  // 정방향 FK 동기화 (joints → 필드). 라이브: in-flight 가드 + trailing.
+  const fkInFlight = useRef(false);
+  const fkDirty = useRef(false);
+  const fkPump = useRef<() => void>(() => {});
+  fkPump.current = async () => {
+    if (fkInFlight.current) return;
+    fkInFlight.current = true;
+    fkDirty.current = false;
+    try {
+      const r = await fk(jointsRef.current);
+      // 사용자가 편집 중이거나 IK 진행 중이면 표시 갱신 보류 (충돌 방지)
+      if (!inFlight.current && Date.now() - editedAt.current > 300) {
+        setPose(fromPose7(r.pose));
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      fkInFlight.current = false;
+      if (fkDirty.current) fkPump.current(); // trailing: 그 사이 joints 변경
+    }
+  };
   useEffect(() => {
-    if (!pose || running) return;
-    latest.current = toPose7(pose);
-    pumpRef.current();
-  }, [pose, running]);
+    if (running || joints.length === 0) return;
+    fkDirty.current = true;
+    fkPump.current();
+  }, [joints, running]);
 
-  const setField = (k: keyof Pose6, v: number) =>
-    setPose((prev) => (prev ? { ...prev, [k]: v } : prev));
+  // 역방향: 필드 편집 → IK (명령형, effect 아님)
+  const setField = (k: keyof Pose6, v: number) => {
+    if (!pose) return;
+    const next = { ...pose, [k]: v };
+    editedAt.current = Date.now();
+    latest.current = toPose7(next);
+    setPose(next);
+    pump.current();
+  };
 
   if (!pose) return null;
 

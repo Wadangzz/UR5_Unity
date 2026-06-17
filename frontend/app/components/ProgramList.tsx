@@ -73,7 +73,7 @@ export default function ProgramList({ joints, onRunProgram, running }: Props) {
           onClick={() => onRunProgram(PID)}
           disabled={running || poses.length === 0}
         >
-          프로그램 실행 ▶ (home→순회)
+          프로그램 실행
         </Button>
         <Button
           variant='ghost'
