@@ -12,9 +12,8 @@ import PoseEditor from '@/components/PoseEditor';
 import ProgramList from '@/components/ProgramList';
 import Plots from '@/components/Plots';
 import {
-  getControllers,
+  CONTROLLERS,
   runSimulation,
-  type ControllerSpec,
   type JointMeta,
   type RunRequest,
   type RunResponse,
@@ -23,7 +22,7 @@ import {
 export default function App() {
   const [meta, setMeta] = useState<JointMeta[]>([]);
   const [joints, setJoints] = useState<number[]>([]);
-  const [controllers, setControllers] = useState<ControllerSpec[]>([]);
+  const controllers = CONTROLLERS;
   const [controller, setController] = useState('computed_torque');
   const [gains, setGains] = useState<Record<string, number>>({});
   const [autoTune, setAutoTune] = useState(false);
@@ -35,11 +34,6 @@ export default function App() {
   const [result, setResult] = useState<RunResponse | null>(null);
   const rafRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    getControllers()
-      .then(setControllers)
-      .catch(() => {});
-  }, []);
   // 게인 결정: 자동(극배치)이면 목표 정착시간에서 계산, 수동이면 제어기 기본값.
   // 극배치(ζ=1 임계, 2% 정착 ts≈4/(ζ·ωn)): ωn=4/ts → Kp=ωn², Kd=2ωn.
   // Ki(있으면)는 안정한계 Ki<Kp·Kd 내 안전값(0.3·Kp·Kd).

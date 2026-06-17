@@ -1,8 +1,6 @@
-"""로봇 정보 / 제어기 목록 라우터."""
+"""로봇 정보 라우터."""
 from fastapi import APIRouter
 from app.core import ur5_model as ur5
-from app import sim
-from app.schemas import ControllerSpec
 from app.meshes_setup import urdf_url, PACKAGE_NAME
 
 router = APIRouter(prefix="/api", tags=["robot"])
@@ -19,8 +17,3 @@ def get_robot():
             "urdf_url": urdf_url(),
             # urdf-loader packages 매핑: package://<name>/... → /meshes/<name>/...
             "packages": {PACKAGE_NAME: f"/meshes/{PACKAGE_NAME}"}}
-
-
-@router.get("/controllers", response_model=list[ControllerSpec])
-def get_controllers():
-    return sim.controller_specs()

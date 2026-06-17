@@ -61,9 +61,3 @@ class RunResponse(SQLModel):
     settle_time: float | None = None         # 평형(정상상태) 도달 시각(s), 미도달 None
     steady_state_error: float | None = None  # 정상상태 오차 ‖θ-θ_d‖(rad)
     diverged: bool = False                   # 발산 여부
-
-
-class ControllerSpec(SQLModel):
-    name: str
-    label: str
-    params: list[dict]

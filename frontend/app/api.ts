@@ -16,8 +16,53 @@ export interface RobotInfo {
 export interface ControllerSpec {
   name: string;
   label: string;
-  params: { key: string; default: number; min: number; max: number }[];
+  params: {
+    key: string;
+    default: number;
+    min: number;
+    max: number;
+    label?: string;
+  }[];
 }
+
+// 제어기 스펙(정적 UI 메타데이터). 백엔드는 controller 문자열+gains 만 받으면 되므로
+// 굳이 API 로 받지 않고 프론트가 보유. 게인 키(kp/ki/kd)는 백엔드 torque 와의 계약.
+export const CONTROLLERS: ControllerSpec[] = [
+  {
+    name: 'pd',
+    label: 'PD + 중력보상',
+    params: [
+      { key: 'kp', default: 100, min: 0, max: 400 },
+      { key: 'kd', default: 20, min: 0, max: 100 },
+    ],
+  },
+  {
+    name: 'pid',
+    label: 'PID',
+    params: [
+      { key: 'kp', default: 120, min: 0, max: 400 },
+      { key: 'ki', default: 60, min: 0, max: 300 },
+      { key: 'kd', default: 35, min: 0, max: 100 },
+    ],
+  },
+  {
+    name: 'computed_torque',
+    label: 'Computed Torque',
+    params: [
+      { key: 'kp', default: 100, min: 0, max: 400 },
+      { key: 'ki', default: 0, min: 0, max: 200 },
+      { key: 'kd', default: 20, min: 0, max: 100 },
+    ],
+  },
+  {
+    name: 'impedance',
+    label: '임피던스 (직교)',
+    params: [
+      { key: 'kp', default: 600, min: 0, max: 3000, label: 'K (강성)' },
+      { key: 'kd', default: 60, min: 0, max: 400, label: 'D (감쇠)' },
+    ],
+  },
+];
 
 export interface RunRequest {
   waypoints?: number[][]; // 관절 경유점(rad)
@@ -76,8 +121,6 @@ export interface Pose {
 }
 
 export const getRobot = () => http.get<RobotInfo>('/robot').then((r) => r.data);
-export const getControllers = () =>
-  http.get<ControllerSpec[]>('/controllers').then((r) => r.data);
 export const runSimulation = (req: RunRequest) =>
   http.post<RunResponse>('/run', req).then((r) => r.data);
 

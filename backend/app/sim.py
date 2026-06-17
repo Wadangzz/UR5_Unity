@@ -12,21 +12,6 @@ N = ur5.N
 MODEL = (ur5.MLIST, ur5.GLIST, ur5.SLIST)
 
 
-def controller_specs():
-    def p(k, d, lo, hi):
-        return {"key": k, "default": d, "min": lo, "max": hi}
-    return [
-        {"name": "pd", "label": "PD + 중력보상",
-         "params": [p("kp", 100, 0, 400), p("kd", 20, 0, 100)]},
-        {"name": "pid", "label": "PID",
-         "params": [p("kp", 120, 0, 400), p("ki", 60, 0, 300), p("kd", 35, 0, 100)]},
-        {"name": "computed_torque", "label": "Computed Torque",
-         "params": [p("kp", 100, 0, 400), p("ki", 0, 0, 200), p("kd", 20, 0, 100)]},
-        {"name": "impedance", "label": "임피던스 (직교)",
-         "params": [p("kp", 600, 0, 3000), p("kd", 60, 0, 400)]},
-    ]
-
-
 def run_simulation(waypoints, controller="computed_torque", gains=None,
                    gravity_comp=True, t_seg=1.2, hold=0.6, hz=30,
                    plant=None, ctrl=None, disturbance=None):

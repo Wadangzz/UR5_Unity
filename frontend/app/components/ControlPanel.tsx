@@ -168,8 +168,8 @@ export default function ControlPanel({
           {spec?.params.map((p) => (
             <div key={p.key} className='space-y-1.5'>
               <div className='flex items-center justify-between'>
-                <Label className='text-muted-foreground text-xs uppercase'>
-                  {p.key}
+                <Label className='text-muted-foreground text-xs'>
+                  {p.label ?? p.key.toUpperCase()}
                 </Label>
                 <span className='text-xs tabular-nums'>
                   {(gains[p.key] ?? p.default).toFixed(0)}
@@ -186,8 +186,8 @@ export default function ControlPanel({
             </div>
           ))}
 
-          {/* 감쇠비 / 적분 안정여유 배지 */}
-          {d && (
+          {/* 감쇠비 / 적분 안정여유 배지 (관절 2차계 기준 — 임피던스 제외) */}
+          {controller !== 'impedance' && d && (
             <div className='bg-muted space-y-1 rounded-md px-2.5 py-1.5 text-xs'>
               <div className='flex items-center justify-between'>
                 <span className='text-muted-foreground tabular-nums'>
