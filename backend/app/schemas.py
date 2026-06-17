@@ -36,6 +36,8 @@ class FKRequest(SQLModel):
 class FKResponse(SQLModel):
     pose: list[float]                       # [x,y,z, qx,qy,qz,qw]
     tcp: list[float]                        # [x,y,z]
+    w: float = 0.0                          # 조작성 √det(JJᵀ)=∏σ_i
+    sigma_min: float = 0.0                  # 최소 특이값 (→0 이면 특이점)
 
 
 class RunRequest(SQLModel):

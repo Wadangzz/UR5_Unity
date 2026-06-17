@@ -105,6 +105,8 @@ export interface IKResponse {
 export interface FKResponse {
   pose: number[]; // [x,y,z, qx,qy,qz,qw]
   tcp: number[];
+  w: number; // 조작성 √det(JJᵀ)
+  sigma_min: number; // 최소 특이값 (→0 특이점)
 }
 
 export interface Pose {

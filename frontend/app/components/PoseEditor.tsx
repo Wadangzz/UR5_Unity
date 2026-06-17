@@ -90,6 +90,7 @@ const fromPose7 = (pose: number[]): Pose6 => {
 export default function PoseEditor({ joints, onSolved, running }: Props) {
   const [pose, setPose] = useState<Pose6 | null>(null);
   const [status, setStatus] = useState('');
+  const [sigma, setSigma] = useState<number | null>(null); // σ_min (특이점 근접)
 
   const latest = useRef<number[] | null>(null); // 마지막 IK 목표 pose7
   const inFlight = useRef(false);
@@ -128,6 +129,7 @@ export default function PoseEditor({ joints, onSolved, running }: Props) {
     fkDirty.current = false;
     try {
       const r = await fk(jointsRef.current);
+      setSigma(r.sigma_min); // 현재 자세의 특이점 근접도 (항상 갱신)
       // 사용자가 편집 중이거나 IK 진행 중이면 표시 갱신 보류 (충돌 방지)
       if (!inFlight.current && Date.now() - editedAt.current > 300) {
         setPose(fromPose7(r.pose));
@@ -160,7 +162,7 @@ export default function PoseEditor({ joints, onSolved, running }: Props) {
   return (
     <Card className='bg-card/95 supports-[backdrop-filter]:bg-card/80 w-60 backdrop-blur'>
       <CardHeader className='pb-3'>
-        <CardTitle className='text-sm'>직교 목표 (라이브 IK)</CardTitle>
+        <CardTitle className='text-sm'>직교 좌표 (6 DOF)</CardTitle>
       </CardHeader>
       <CardContent className='space-y-2'>
         {FIELDS.map((f) => (
@@ -181,6 +183,18 @@ export default function PoseEditor({ joints, onSolved, running }: Props) {
         ))}
         {status && (
           <p className='text-muted-foreground text-center text-xs'>{status}</p>
+        )}
+        {sigma !== null && (
+          <div className='bg-muted flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs'>
+            <span className='text-muted-foreground tabular-nums'>
+              조작성 σ_min={sigma.toFixed(3)}
+            </span>
+            <span
+              className={`font-medium ${sigma < 0.03 ? 'text-red-600' : 'text-emerald-600'}`}
+            >
+              {sigma < 0.03 ? '⚠ 특이점 근접' : '정상'}
+            </span>
+          </div>
         )}
       </CardContent>
     </Card>

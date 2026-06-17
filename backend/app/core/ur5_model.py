@@ -125,9 +125,32 @@ def jacobian_body(theta):
     return Jb
 
 
+_SING_EPS = 0.04      # σ_min 이 이보다 작으면 특이점 근접 → 감쇠
+_SING_LAM = 0.04      # damped least-squares 감쇠 상한
+
+
+def _dls_inv(Jb):
+    """damped least-squares 역(특이점 근처서 큰 점프 방지).
+    σ_min ≥ ε 면 일반 pinv, 미만이면 감쇠 λ²(JJᵀ+λ²I)⁻¹."""
+    s_min = np.linalg.svd(Jb, compute_uv=False)[-1]
+    if s_min >= _SING_EPS:
+        return np.linalg.pinv(Jb)
+    lam2 = _SING_LAM ** 2 * (1.0 - (s_min / _SING_EPS) ** 2)
+    return Jb.T @ np.linalg.inv(Jb @ Jb.T + lam2 * np.eye(6))
+
+
+def manipulability(theta):
+    """Yoshikawa 조작성. w=√det(JJᵀ)=∏σ_i, sigma_min=min 특이값.
+    w→0 / sigma_min→0 이면 특이점."""
+    Jb = jacobian_body(np.asarray(theta, dtype=float))
+    sv = np.linalg.svd(Jb, compute_uv=False)
+    return {"w": float(np.prod(sv)), "sigma_min": float(sv[-1])}
+
+
 def ik(T_target, theta0=None, eomg=1e-4, ev=1e-4, max_iter=100):
     """
-    수치 역기구학 (Newton-Raphson, body frame). 라디안.
+    수치 역기구학 (Newton-Raphson, body frame, damped least-squares). 라디안.
+    특이점 근처에선 DLS 로 감쇠해 발산 없이 수렴.
     :param T_target: 목표 말단 변환행렬 (4x4)
     :param theta0  : 초기 추정 관절각 (rad)
     :return: (해 관절각, 수렴여부)
@@ -144,7 +167,7 @@ def ik(T_target, theta0=None, eomg=1e-4, ev=1e-4, max_iter=100):
         if ang < eomg and pos < ev:
             return wrap(theta), True
         Vb = SE3.log(T_err)[0]                            # body twist 오차
-        theta = theta + np.linalg.pinv(jacobian_body(theta)) @ Vb
+        theta = theta + _dls_inv(jacobian_body(theta)) @ Vb
     return wrap(theta), False
 
 

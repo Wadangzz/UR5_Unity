@@ -17,4 +17,6 @@ def solve_fk(req: FKRequest) -> FKResponse:
     T = ur5.fk(np.array(req.theta))
     pos = T[:3, 3].tolist()
     quat, _ = SE3.orientation(T)            # [x,y,z,w]
-    return FKResponse(pose=pos + quat, tcp=pos)
+    m = ur5.manipulability(req.theta)       # 특이점 근접도
+    return FKResponse(pose=pos + quat, tcp=pos,
+                      w=m["w"], sigma_min=m["sigma_min"])
