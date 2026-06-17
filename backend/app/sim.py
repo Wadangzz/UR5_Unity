@@ -21,7 +21,7 @@ def controller_specs():
         {"name": "pid", "label": "PID",
          "params": [p("kp", 120, 0, 400), p("ki", 60, 0, 300), p("kd", 35, 0, 100)]},
         {"name": "computed_torque", "label": "Computed Torque",
-         "params": [p("kp", 100, 0, 400), p("kd", 20, 0, 100), p("ki", 0, 0, 200)]},
+         "params": [p("kp", 100, 0, 400), p("ki", 0, 0, 200), p("kd", 20, 0, 100)]},
     ]
 
 
