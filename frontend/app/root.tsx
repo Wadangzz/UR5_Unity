@@ -3,11 +3,13 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Grid } from '@react-three/drei'
 import RobotView from '@/components/RobotView'
 import ControlPanel from '@/components/ControlPanel'
+import Plots from '@/components/Plots'
 import {
   getControllers,
   runSimulation,
   type ControllerSpec,
   type JointMeta,
+  type RunResponse,
 } from '@/api'
 
 export default function App() {
@@ -15,12 +17,24 @@ export default function App() {
   const [joints, setJoints] = useState<number[]>([])
   const [controllers, setControllers] = useState<ControllerSpec[]>([])
   const [controller, setController] = useState('computed_torque')
+  const [gains, setGains] = useState<Record<string, number>>({})
   const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<RunResponse | null>(null)
   const rafRef = useRef<number | null>(null)
 
   useEffect(() => {
     getControllers().then(setControllers).catch(() => {})
   }, [])
+  // 제어기 바뀌면 해당 제어기 기본 게인으로 초기화
+  useEffect(() => {
+    const spec = controllers.find((c) => c.name === controller)
+    if (!spec) return
+    const g: Record<string, number> = {}
+    spec.params.forEach((p) => (g[p.key] = p.default))
+    setGains(g)
+  }, [controller, controllers])
+  const setGain = (key: string, value: number) =>
+    setGains((prev) => ({ ...prev, [key]: value }))
   // 언마운트 시 재생 루프 정리
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -62,7 +76,8 @@ export default function App() {
     const home = meta.map(() => 0)
     setRunning(true)
     try {
-      const res = await runSimulation({ waypoints: [home, target], controller })
+      const res = await runSimulation({ waypoints: [home, target], controller, gains })
+      setResult(res)
       play(res.theta, res.t)
     } catch (e) {
       console.error(e)
@@ -90,9 +105,15 @@ export default function App() {
           controllers={controllers}
           controller={controller}
           onControllerChange={setController}
+          gains={gains}
+          onGainChange={setGain}
           onRun={run}
           running={running}
         />
+      </div>
+
+      <div className="absolute bottom-4 left-4 z-10">
+        <Plots result={result} />
       </div>
 
       <Canvas camera={{ position: [1.4, 1.1, 1.4], fov: 50 }} shadows>
