@@ -30,8 +30,8 @@ interface Props {
   onPayloadChange: (value: number) => void;
   modelScale: number;
   onModelScaleChange: (value: number) => void;
-  pushForce: number;
-  onPushForceChange: (value: number) => void;
+  push: number[];
+  onPushAxisChange: (index: number, value: number) => void;
   onRun: () => void;
   running: boolean;
 }
@@ -75,8 +75,8 @@ export default function ControlPanel({
   onPayloadChange,
   modelScale,
   onModelScaleChange,
-  pushForce,
-  onPushForceChange,
+  push,
+  onPushAxisChange,
   onRun,
   running,
 }: Props) {
@@ -130,38 +130,40 @@ export default function ControlPanel({
             </Select>
           </div>
 
-          {/* 자동 튜닝 토글 */}
-          <div className='flex items-center justify-between'>
-            <Label className='text-muted-foreground text-xs'>
-              자동 튜닝 (극배치)
-            </Label>
-            <Switch
-              checked={autoTune}
-              onCheckedChange={onAutoTuneChange}
-              disabled={running}
-            />
-          </div>
-
-          {/* 자동: 목표 정착시간 슬라이더 (게인은 자동 계산) */}
-          {autoTune && (
-            <div className='space-y-1.5'>
+          {/* 자동 튜닝(극배치) — 관절 2차계용. 임피던스(직교 강성)엔 N/A 라 숨김 */}
+          {controller !== 'impedance' && (
+            <>
               <div className='flex items-center justify-between'>
                 <Label className='text-muted-foreground text-xs'>
-                  목표 정착시간
+                  자동 튜닝 (극배치)
                 </Label>
-                <span className='text-xs tabular-nums'>
-                  {targetTs.toFixed(2)}s
-                </span>
+                <Switch
+                  checked={autoTune}
+                  onCheckedChange={onAutoTuneChange}
+                  disabled={running}
+                />
               </div>
-              <Slider
-                min={0.2}
-                max={1.5}
-                step={0.05}
-                value={[targetTs]}
-                disabled={running}
-                onValueChange={([v]) => onTargetTsChange(v)}
-              />
-            </div>
+              {autoTune && (
+                <div className='space-y-1.5'>
+                  <div className='flex items-center justify-between'>
+                    <Label className='text-muted-foreground text-xs'>
+                      목표 정착시간
+                    </Label>
+                    <span className='text-xs tabular-nums'>
+                      {targetTs.toFixed(2)}s
+                    </span>
+                  </div>
+                  <Slider
+                    min={0.2}
+                    max={1.5}
+                    step={0.05}
+                    value={[targetTs]}
+                    disabled={running}
+                    onValueChange={([v]) => onTargetTsChange(v)}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {/* 제어기별 게인 슬라이더 (자동 모드면 계산값 표시·잠금) */}
@@ -180,7 +182,7 @@ export default function ControlPanel({
                 max={p.max}
                 step={1}
                 value={[gains[p.key] ?? p.default]}
-                disabled={running || autoTune}
+                disabled={running || (autoTune && controller !== 'impedance')}
                 onValueChange={([v]) => onGainChange(p.key, v)}
               />
             </div>
@@ -253,25 +255,33 @@ export default function ControlPanel({
             </div>
           </div>
 
-          {/* 외란: 모션 후 끝단에 가하는 외력(+X). 임피던스 컴플라이언스 시연용 */}
-          <div className='space-y-1.5 border-t pt-3'>
+          {/* 외란: 모션 후 끝단에 가하는 외력(base 프레임 3축). 컴플라이언스 시연용 */}
+          <div className='space-y-2 border-t pt-3'>
             <p className='text-muted-foreground text-xs font-medium'>
-              외란 (외력)
+              외란 (외력, N)
             </p>
-            <div className='flex items-center justify-between'>
-              <Label className='text-muted-foreground text-xs'>
-                밀치는 힘 (+X)
-              </Label>
-              <span className='text-xs tabular-nums'>{pushForce} N</span>
-            </div>
-            <Slider
-              min={0}
-              max={80}
-              step={5}
-              value={[pushForce]}
-              disabled={running}
-              onValueChange={([v]) => onPushForceChange(v)}
-            />
+            {[
+              { i: 0, label: 'Fx', color: 'text-red-600' },
+              { i: 1, label: 'Fy', color: 'text-emerald-600' },
+              { i: 2, label: 'Fz', color: 'text-blue-600' },
+            ].map((a) => (
+              <div key={a.i} className='flex items-center gap-2'>
+                <span className={`w-6 text-xs font-bold ${a.color}`}>
+                  {a.label}
+                </span>
+                <Slider
+                  min={-80}
+                  max={80}
+                  step={5}
+                  value={[push[a.i] ?? 0]}
+                  disabled={running}
+                  onValueChange={([v]) => onPushAxisChange(a.i, v)}
+                />
+                <span className='w-8 text-right text-xs tabular-nums'>
+                  {push[a.i] ?? 0}
+                </span>
+              </div>
+            ))}
           </div>
 
           <Button

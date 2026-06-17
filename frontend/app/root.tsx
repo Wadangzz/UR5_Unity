@@ -29,7 +29,9 @@ export default function App() {
   const [targetTs, setTargetTs] = useState(0.6); // 목표 정착시간(s)
   const [payload, setPayload] = useState(0);
   const [modelScale, setModelScale] = useState(1);
-  const [pushForce, setPushForce] = useState(0); // 외란 외력 크기(N, +X)
+  const [push, setPush] = useState<number[]>([0, 0, 0]); // 외란 외력(N, base XYZ)
+  const setPushAxis = (index: number, value: number) =>
+    setPush((prev) => prev.map((p, i) => (i === index ? value : p)));
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResponse | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -41,7 +43,8 @@ export default function App() {
     const spec = controllers.find((c) => c.name === controller);
     if (!spec) return;
     const g: Record<string, number> = {};
-    if (autoTune) {
+    // 극배치 자동튜닝은 관절 2차계용 → 임피던스(직교 강성)는 항상 기본값/수동
+    if (autoTune && controller !== 'impedance') {
       const wn = 4 / targetTs;
       const kp = wn * wn;
       const kd = 2 * wn;
@@ -110,7 +113,7 @@ export default function App() {
         gains,
         payload,
         model_scale: modelScale,
-        disturbance: [pushForce, 0, 0],
+        disturbance: push,
         ...req,
       });
       setResult(res);
@@ -155,8 +158,8 @@ export default function App() {
           onPayloadChange={setPayload}
           modelScale={modelScale}
           onModelScaleChange={setModelScale}
-          pushForce={pushForce}
-          onPushForceChange={setPushForce}
+          push={push}
+          onPushAxisChange={setPushAxis}
           onRun={run}
           running={running}
         />
