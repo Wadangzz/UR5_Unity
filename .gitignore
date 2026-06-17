@@ -5,6 +5,8 @@ __pycache__/
 .venv/
 venv/
 docs/
+node_modules/
+dist/
 
 # Editor / IDE
 .vscode/
@@ -15,7 +17,11 @@ outputs/
 *.npz
 *.db
 
+# robot_descriptions 캐시에서 복사되는 URDF+메시 (기동 시 자동 생성)
+backend/app/meshes/
+
 # Office / 문서 작업 파일
 *.pptx
 *.docx
 *.xlsx
+image.png

@@ -3,17 +3,22 @@ from fastapi import APIRouter
 from app.core import ur5_model as ur5
 from app import sim
 from app.schemas import ControllerSpec
+from app.meshes_setup import urdf_url, PACKAGE_NAME
 
 router = APIRouter(prefix="/api", tags=["robot"])
 
-JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow",
-               "wrist_1", "wrist_2", "wrist_3"]
+# urdf-loader 가 다루는 URDF 관절 이름 (cfg 적용 순서)
+JOINT_NAMES = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
+               "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
 
 
 @router.get("/robot")
 def get_robot():
     return {"name": "UR5", "n": ur5.N, "joint_names": JOINT_NAMES,
-            "home": [0.0] * ur5.N, "home_tcp": ur5.M_HOME[:3, 3].tolist()}
+            "home": [0.0] * ur5.N, "home_tcp": ur5.M_HOME[:3, 3].tolist(),
+            "urdf_url": urdf_url(),
+            # urdf-loader packages 매핑: package://<name>/... → /meshes/<name>/...
+            "packages": {PACKAGE_NAME: f"/meshes/{PACKAGE_NAME}"}}
 
 
 @router.get("/controllers", response_model=list[ControllerSpec])
