@@ -27,6 +27,8 @@ export interface RunRequest {
   gravity_comp?: boolean
   t_seg?: number
   hold?: number
+  payload?: number                 // 끝단 미지 질량(kg), plant 에만
+  model_scale?: number             // 컨트롤러 질량 배율(1.0=정확)
 }
 
 export interface RunResponse {

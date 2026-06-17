@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlmodel import Session, select
 from app.core import ur5_model as ur5
 from app.core.robot_math import SE3
-from app import sim
+from app import sim, realism
 from app.models import Pose
 from app.schemas import RunRequest
 
@@ -26,6 +26,8 @@ def run(req: RunRequest, session: Session):
     else:
         raise HTTPException(400, "program_id 또는 waypoints 중 하나는 필요합니다")
 
+    plant, ctrl = realism.build_models(req.payload, req.model_scale)
     return sim.run_simulation(
         waypoints, controller=req.controller, gains=req.gains,
-        gravity_comp=req.gravity_comp, t_seg=req.t_seg, hold=req.hold)
+        gravity_comp=req.gravity_comp, t_seg=req.t_seg, hold=req.hold,
+        plant=plant, ctrl=ctrl)

@@ -18,6 +18,8 @@ export default function App() {
   const [controllers, setControllers] = useState<ControllerSpec[]>([])
   const [controller, setController] = useState('computed_torque')
   const [gains, setGains] = useState<Record<string, number>>({})
+  const [payload, setPayload] = useState(0)
+  const [modelScale, setModelScale] = useState(1)
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<RunResponse | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -76,7 +78,13 @@ export default function App() {
     const home = meta.map(() => 0)
     setRunning(true)
     try {
-      const res = await runSimulation({ waypoints: [home, target], controller, gains })
+      const res = await runSimulation({
+        waypoints: [home, target],
+        controller,
+        gains,
+        payload,
+        model_scale: modelScale,
+      })
       setResult(res)
       play(res.theta, res.t)
     } catch (e) {
@@ -107,6 +115,10 @@ export default function App() {
           onControllerChange={setController}
           gains={gains}
           onGainChange={setGain}
+          payload={payload}
+          onPayloadChange={setPayload}
+          modelScale={modelScale}
+          onModelScaleChange={setModelScale}
           onRun={run}
           running={running}
         />

@@ -12,10 +12,6 @@ N = ur5.N
 MODEL = (ur5.MLIST, ur5.GLIST, ur5.SLIST)
 
 
-def _gravity(th):
-    return Dynamics.gravity_forces(th, ur5.GRAVITY, *MODEL)
-
-
 def controller_specs():
     def p(k, d, lo, hi):
         return {"key": k, "default": d, "min": lo, "max": hi}
@@ -30,12 +26,22 @@ def controller_specs():
 
 
 def run_simulation(waypoints, controller="computed_torque", gains=None,
-                   gravity_comp=True, t_seg=1.2, hold=0.6, hz=30):
-    """관절 경유점(rad)을 제어기로 순회. → {t, theta, tcp, error, torque, waypoints_tcp}."""
+                   gravity_comp=True, t_seg=1.2, hold=0.6, hz=30,
+                   plant=None, ctrl=None):
+    """관절 경유점(rad)을 제어기로 순회. → {t, theta, tcp, error, torque, waypoints_tcp}.
+
+    plant=진짜 로봇 모델, ctrl=컨트롤러가 아는 모델. 둘 다 None 이면 공칭 MODEL
+    (plant=ctrl → 이상적). realism.build_models 로 페이로드·모델오차를 주입할 수 있다.
+    """
     gains = gains or {}
     Kp = float(gains.get("kp", 100.0))
     Kd = float(gains.get("kd", 20.0))
     Ki = float(gains.get("ki", 60.0))
+    plant = plant or MODEL
+    ctrl = ctrl or MODEL
+
+    def g_ctrl(th):
+        return Dynamics.gravity_forces(th, ur5.GRAVITY, *ctrl)
 
     WP = [np.asarray(w, dtype=float) for w in waypoints]
     if len(WP) < 2:
@@ -59,21 +65,21 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
         e, ed = th_d - th, dth_d - dth
         if controller == "computed_torque":
             aq = ddth_d + Kd * ed + Kp * e
-            M = Dynamics.mass_matrix(th, *MODEL)
-            c = Dynamics.coriolis_forces(th, dth, *MODEL)
-            return M @ aq + c + _gravity(th)
+            M = Dynamics.mass_matrix(th, *ctrl)
+            c = Dynamics.coriolis_forces(th, dth, *ctrl)
+            return M @ aq + c + g_ctrl(th)
         if controller == "pid":
             tau = Kp * e + Ki * I + Kd * ed
-            return tau + _gravity(th) if gravity_comp else tau
+            return tau + g_ctrl(th) if gravity_comp else tau
         tau = Kp * e + Kd * ed                  # pd
-        return tau + _gravity(th) if gravity_comp else tau
+        return tau + g_ctrl(th) if gravity_comp else tau
 
     def rhs(t, x):
         th, dth = x[:N], x[N:2 * N]
         I = x[2 * N:] if use_I else np.zeros(N)
         th_d, dth_d, ddth_d = ref(t)
         tau = torque(th, dth, th_d, dth_d, ddth_d, I)
-        ddth = Dynamics.forward_dynamics(th, dth, tau, ur5.GRAVITY, np.zeros(N), *MODEL)
+        ddth = Dynamics.forward_dynamics(th, dth, tau, ur5.GRAVITY, np.zeros(N), *plant)
         parts = [dth, ddth] + ([th_d - th] if use_I else [])
         return np.concatenate(parts)
 

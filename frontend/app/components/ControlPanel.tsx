@@ -21,6 +21,10 @@ interface Props {
   onControllerChange: (value: string) => void
   gains: Record<string, number>
   onGainChange: (key: string, value: number) => void
+  payload: number
+  onPayloadChange: (value: number) => void
+  modelScale: number
+  onModelScaleChange: (value: number) => void
   onRun: () => void
   running: boolean
 }
@@ -55,6 +59,10 @@ export default function ControlPanel({
   onControllerChange,
   gains,
   onGainChange,
+  payload,
+  onPayloadChange,
+  modelScale,
+  onModelScaleChange,
   onRun,
   running,
 }: Props) {
@@ -129,6 +137,39 @@ export default function ControlPanel({
               <span className={`font-medium ${d.color}`}>{d.label}</span>
             </div>
           )}
+
+          {/* 모델 불확실성: plant(진짜) ≠ controller(아는 모델) */}
+          <div className="space-y-3 border-t pt-3">
+            <p className="text-xs font-medium text-muted-foreground">모델 불확실성 (plant ≠ 모델)</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">페이로드 (미지 질량)</Label>
+                <span className="text-xs tabular-nums">{payload.toFixed(1)} kg</span>
+              </div>
+              <Slider
+                min={0}
+                max={5}
+                step={0.5}
+                value={[payload]}
+                disabled={running}
+                onValueChange={([v]) => onPayloadChange(v)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">모델 질량배율</Label>
+                <span className="text-xs tabular-nums">×{modelScale.toFixed(2)}</span>
+              </div>
+              <Slider
+                min={0.5}
+                max={1.5}
+                step={0.05}
+                value={[modelScale]}
+                disabled={running}
+                onValueChange={([v]) => onModelScaleChange(v)}
+              />
+            </div>
+          </div>
 
           <Button className="w-full" size="sm" onClick={onRun} disabled={running}>
             {running ? '재생 중…' : 'Run ▶  home → 현재자세'}

@@ -36,6 +36,8 @@ class RunRequest(SQLModel):
     gravity_comp: bool = True
     t_seg: float = 1.2
     hold: float = 0.6
+    payload: float = 0.0                         # 끝단 미지 질량(kg), plant 에만
+    model_scale: float = 1.0                     # 컨트롤러 질량 배율(1.0=정확)
 
 
 class RunResponse(SQLModel):
