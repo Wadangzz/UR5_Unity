@@ -5,7 +5,7 @@ robot_math.Dynamics 는 Mlist/Glist/Slist 를 인자로 받으므로, 현재는 
 """
 import numpy as np
 from scipy.integrate import solve_ivp
-from app.core.robot_math import Dynamics, quintic_time_scaling
+from app.core.robot_math import Dynamics, SE3, quintic_time_scaling
 from app.core import ur5_model as ur5
 
 N = ur5.N
@@ -22,6 +22,8 @@ def controller_specs():
          "params": [p("kp", 120, 0, 400), p("ki", 60, 0, 300), p("kd", 35, 0, 100)]},
         {"name": "computed_torque", "label": "Computed Torque",
          "params": [p("kp", 100, 0, 400), p("ki", 0, 0, 200), p("kd", 20, 0, 100)]},
+        {"name": "impedance", "label": "임피던스 (직교)",
+         "params": [p("kp", 600, 0, 3000), p("kd", 60, 0, 400)]},
     ]
 
 
@@ -71,6 +73,13 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
         if controller == "pid":
             tau = Kp * e + Ki * I + Kd * ed
             return tau + g_ctrl(th) if gravity_comp else tau
+        if controller == "impedance":
+            # 직교(전체 pose) 임피던스: body twist 오차에 스프링-댐퍼.
+            # V_err = log(T⁻¹·T_d) (body twist), τ = Jbᵀ(Kp·V_err − Kd·Jb·θ̇) + g
+            Verr = SE3.log(np.linalg.inv(ur5.fk(th)) @ ur5.fk(th_d))[0]
+            Jb = ur5.jacobian_body(th)
+            F = Kp * Verr - Kd * (Jb @ dth)
+            return Jb.T @ F + g_ctrl(th)
         tau = Kp * e + Kd * ed                  # pd
         return tau + g_ctrl(th) if gravity_comp else tau
 
@@ -110,7 +119,13 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
 
     TH, DTH = sol.y[:N].T, sol.y[N:2 * N].T
     II = sol.y[2 * N:].T if use_I else np.zeros((len(sol.t), N))
-    err = np.array([np.linalg.norm(TH[i] - ref(t)[0]) for i, t in enumerate(sol.t)])
+    # 추종오차: 임피던스는 task-space(TCP 위치 m), 그 외는 joint-space(rad).
+    # (임피던스는 같은 pose 를 다른 관절 config 로 도달할 수 있어 joint 오차가 무의미)
+    if controller == "impedance":
+        err = np.array([np.linalg.norm(ur5.fk(TH[i])[:3, 3] - ur5.fk(ref(t)[0])[:3, 3])
+                        for i, t in enumerate(sol.t)])
+    else:
+        err = np.array([np.linalg.norm(TH[i] - ref(t)[0]) for i, t in enumerate(sol.t)])
     vmax = (np.max(np.abs(DTH), axis=1) if len(sol.t)
             else np.zeros(0))               # 시각별 최대 관절속도
 
