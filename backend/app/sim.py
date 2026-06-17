@@ -21,7 +21,7 @@ def controller_specs():
         {"name": "pid", "label": "PID",
          "params": [p("kp", 120, 0, 400), p("ki", 60, 0, 300), p("kd", 35, 0, 100)]},
         {"name": "computed_torque", "label": "Computed Torque",
-         "params": [p("kp", 100, 0, 400), p("kd", 20, 0, 100)]},
+         "params": [p("kp", 100, 0, 400), p("kd", 20, 0, 100), p("ki", 0, 0, 200)]},
     ]
 
 
@@ -36,7 +36,7 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
     gains = gains or {}
     Kp = float(gains.get("kp", 100.0))
     Kd = float(gains.get("kd", 20.0))
-    Ki = float(gains.get("ki", 60.0))
+    Ki = float(gains.get("ki", 0.0))
     plant = plant or MODEL
     ctrl = ctrl or MODEL
 
@@ -49,7 +49,7 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
     n_seg = len(WP) - 1
     seg = t_seg + hold
     T = n_seg * seg
-    use_I = controller == "pid"
+    use_I = controller in ("pid", "computed_torque")
 
     def ref(t):
         k = min(int(t // seg), n_seg - 1)
@@ -64,7 +64,7 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
     def torque(th, dth, th_d, dth_d, ddth_d, I):
         e, ed = th_d - th, dth_d - dth
         if controller == "computed_torque":
-            aq = ddth_d + Kd * ed + Kp * e
+            aq = ddth_d + Kd * ed + Kp * e + Ki * I
             M = Dynamics.mass_matrix(th, *ctrl)
             c = Dynamics.coriolis_forces(th, dth, *ctrl)
             return M @ aq + c + g_ctrl(th)
