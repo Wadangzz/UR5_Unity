@@ -88,20 +88,25 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
     # 정착까지: 모션(T) 종료 후 상한(SETTLE_MAX)까지 적분.
     # 발산 안전망: |θ| 가 타당한 오버슛보다 훨씬 큰 THETA_MAX 돌파 시 즉시 종료
     # (inf/NaN 방지용. 발산 '판정'은 아래 정착 실패 + 증가추세로 한다).
-    SETTLE_MAX = 4.0
+    SETTLE_MAX = 2.0                        # 평형 대기 상한(s) — 계산시간 단축
     VEL_TOL = 0.02                          # 정상상태(평형) 판정 속도 임계 rad/s
     VEL_WIN = 0.2                           # 그 속도 이하를 유지해야 하는 윈도우 s
-    THETA_MAX = 6 * np.pi                   # 발산 안전망(rad)
+    THETA_MAX = 3 * np.pi                   # 발산 안전망: 위치(rad), 오버슛보다 큼
+    OMEGA_MAX = 20.0                        # 발산 안전망: 속도(rad/s), 정상 ~2 보다 큼
     T_cap = T + SETTLE_MAX
 
+    # 위치 또는 속도가 폭주하면 즉시 종료(발산 적분이 길어지는 것 방지)
     def blowup(t, x):
-        return THETA_MAX - float(np.max(np.abs(x[:N])))
+        return min(THETA_MAX - float(np.max(np.abs(x[:N]))),
+                   OMEGA_MAX - float(np.max(np.abs(x[N:2 * N]))))
     blowup.terminal = True
     blowup.direction = -1
 
     t_eval = np.linspace(0, T_cap, int(T_cap * hz) + 1)
-    sol = solve_ivp(rhs, (0, T_cap), x0, t_eval=t_eval, method="RK45",
-                    rtol=1e-6, atol=1e-9, events=blowup)
+    # PD/PID 폐루프는 stiff(고주파) → 명시적 RK45는 스텝 폭발(수십 초).
+    # 암시적 Radau 로 ~20-30배 빠름. 허용오차는 시각화용이라 완화(30Hz 샘플엔 충분).
+    sol = solve_ivp(rhs, (0, T_cap), x0, t_eval=t_eval, method="Radau",
+                    rtol=1e-4, atol=1e-7, events=blowup)
 
     TH, DTH = sol.y[:N].T, sol.y[N:2 * N].T
     II = sol.y[2 * N:].T if use_I else np.zeros((len(sol.t), N))
