@@ -1,5 +1,5 @@
 [project]
-name = "pythonscript"
+name = "urdf_sim"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"

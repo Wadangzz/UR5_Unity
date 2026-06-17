@@ -275,7 +275,7 @@ class SE3:
 #  Kinematics — SO3/SE3 연산을 조합한 알고리즘 계층 (Jacobian, IK)
 # ======================================================================
 class Kinematics:
-    """Jacobian, 역기구학 등 군/대수 primitive 를 조합한 기구학 알고리즘."""
+    """Jacobian, 역기구학 등 Lie Group/Algebra primitive 를 조합한 기구학 알고리즘."""
 
     @staticmethod
     def space_jacobian(matexps, screws):
@@ -654,3 +654,4 @@ def joint_trajectory(start, end, times=1.0, samples=100):
 # ----------------------------------------------------------------------
 def IK(robot, init, desired):
     return Kinematics.IK(robot, init, desired)
+
