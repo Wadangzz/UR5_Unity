@@ -66,26 +66,57 @@ uv run python demos/gravity_demo.py   # 데모
 
 ---
 
-## 📋 내일 할 것 (TODO)
+## 2026-06-17
 
-웹 시뮬레이터 단계 (설계: `backend/WEB_DESIGN.md`)
+### 🎯 오늘 한 것 — 웹 시뮬레이터 풀스택 + 제어 인터랙션 (develop, ~30 커밋)
 
-- [ ] **2. URDF·메시 정적 서빙** — robot_descriptions UR5 메시를 `/meshes` 로 (프론트가 로드)
-- [ ] **3. frontend/ 스캐폴드** — Vite React + `react-three-fiber` + `urdf-loader`
-      - `RobotView`(메시 렌더 + θ(t) 재생), `ControlPanel`(제어기·게인 슬라이더),
-        `PoseEditor`(관절/직교목표 + Save), `ProgramList`(Run/Reset), `Plots`(오차·토크)
-- [ ] **4. 컨트롤 ↔ API 연결** — Save/Run → `/api/run` → 메시 재생
-- [ ] **5. Plots** (recharts) + 폴리시
-- [ ] **6. Docker** — backend Dockerfile + frontend Dockerfile + docker-compose
-- [ ] **마무리** — README 재작성(웹 기준), `pythonscript/` 껍데기 삭제(.venv 잠김 풀리면)
+**메시/렌더**
+- `/meshes` 정적 서빙 (`app/meshes_setup.py`: robot_descriptions UR5 URDF+메시 복사, gitignore)
+- `frontend/` (synex 컨벤션: 소스 `app/`, `main.web.tsx`, `root.tsx`, alias `@`):
+  pnpm + Vite8 + React19 + **r3f v9 + drei v10** + three + urdf-loader
+- `RobotView`: urdf-loader 로 UR5 메시 렌더. **Z-up 씬**(camera.up=+Z → 월드축=로봇축=직교축 일치),
+  `flat`(톤매핑 끔)+다방향 조명, 좌하단 **XYZ 기즈모**
+- 백엔드 포트 **8500** (8000=synex), `backend/main.py` 진입점(`uv run main.py`)
 
-### 🚀 확장 아이디어 (킬러 기능)
-- [ ] **URDF 업로드 → 범용 로봇 시뮬** — `mr_urdf_loader` 로 URDF→{Mlist,Glist,Slist}
-      추출 → `app/sim` 이 그대로 소비 (이미 인자로 받음). UR5 전용 → "뭐든 시뮬"
-- [ ] WebSocket 실시간 jog / 임피던스 외력 인터랙션
+**제어 / 시뮬**
+- 관절 슬라이더 jog(브라우저 FK, `setJointValues` — 백엔드 왕복 0)
+- `POST /api/run` 제어 시뮬 → θ(t) `requestAnimationFrame` 재생 (현재자세/프로그램 순회)
+- 제어기 4종: **PD+중력보상 · PID · Computed Torque**(+Ki=PID-CT) · **임피던스**
+  (직교 6-DOF, `V=log(T⁻¹T_d)` body twist, `τ=Jbᵀ(K·V−D·Jb·θ̇)+g`)
+- 게인 슬라이더 + **ζ·ωn 배지 + 적분 안정여유**(Routh `Ki<Kp·Kd`)
+- **자동튜닝(극배치)** 토글: 목표 정착시간 → `Kp=ωn², Kd=2ωn` (관절용, 임피던스 제외)
+- **모델 불확실성**(payload·질량배율, plant≠ctrl) + **외란**(3축 외력 Ftip → 임피던스 `Δx=F/K` 컴플라이언스)
+- 엔진: **정상상태(속도≈0) 정착까지 가변 적분 + 발산 가드** → `settle_time/steady_state_error/diverged`
+- 성능: stiff 솔버 **Radau** (PD/PID 37~106s → ~3s)
+- **특이점**: DLS IK 회피(σ_min<0.04 감쇠) + manipulability(`w=√det(JJᵀ)`, σ_min) 라이브 표시
+
+**직교 / 티치**
+- `PoseEditor`: 직교 6-DOF(X,Y,Z,RX,RY,RZ) **라이브 IK ↔ 관절 FK 양방향**, σ_min 배지
+- `POST /api/fk` 추가. `ProgramList`: 티치(**관절각+Cartesian 둘 다** 저장)·실행·포즈 개별 삭제
+- `Plots`(recharts): 추종오차·토크 + 정착/정상상태오차/발산 표시
+
+**툴체인 / 구조**
+- ESLint/Prettier **synex 설정 통일**(+tailwind 클래스 정렬), 제어기 스펙을 **프론트 const**로(API 불필요)
+
+**개념 정리(대화):** PD/PID/CT·중력보상·역동역학(RNE)·PID-CT의 I게인·정착 vs 정상상태·
+외란 vs 모델불확실성·임피던스(task-space PD, SE3, Jᵀ)·강성/감쇠=가상 게인·
+SO(3)/SE(3) 군 vs so(3)/se(3) 대수·manipulability 특이점 판정.
+
+---
+
+## 📋 다음 할 것 (TODO)
+
+- [ ] **멀티로봇** — (b) 백엔드 큐레이션(robot_descriptions ur5/ur10/panda/iiwa) + 프론트 선택,
+      `mr_urdf_loader` 로 `{Mlist,Glist,Slist}` 추출(sim 이미 인자로 소비), 메시 서빙 일반화.
+      → 그 뒤 (a) **URDF 업로드**(메시 동반 필요)
+- [ ] **속도제어**(관절 θ̇_d 적분→추종 / 직교 resolved-rate `J†`) + **순수 토크 입력 모드**
+- [ ] **힘제어**(hybrid position/force)·어드미턴스, **마찰·토크포화·센서노이즈** 현실 모델
+- [ ] 특이점: resolved-rate 에 DLS `J†`, 조작성 게이지(σ_min 이미 표시)
+- [ ] **Docker** 배포 + README 재작성(웹 기준)
 
 ### ⚠️ 주의/메모
-- 브랜치 `develop`. **push는 직접** 할 예정 (오늘 미push)
-- `pythonscript/` 폴더 껍데기(.venv만, gitignore) 남음 — IDE/터미널 닫으면 삭제 가능
-- 런타임 DB `robot.db`, 산출물 `outputs/`, `*.npz` 는 gitignore
-- 데모 실행은 `uv run python demos/xxx.py` (shim 이 backend/ 를 path 에 추가)
+- 브랜치 `develop`, **push 미실시**(직접)
+- 실행: 백엔드 `cd backend && uv run main.py`(:8500), 프론트 `cd frontend && pnpm dev`(:5174)
+- `Pose` 등 **DB 스키마 변경 시 `backend/robot.db` 삭제 후 재시작**(create_all 은 ALTER 안 함)
+- **UR5 zero(home) 자세가 특이점** → 시작 시 σ_min=0 경고는 정상
+- 런타임 `robot.db`·`outputs/`·`*.npz`·`backend/app/meshes/`·`node_modules`·`dist` 는 gitignore
