@@ -28,6 +28,15 @@ class IKResponse(SQLModel):
     tcp: list[float]
 
 
+class FKRequest(SQLModel):
+    theta: list[float]                      # 관절각(rad)
+
+
+class FKResponse(SQLModel):
+    pose: list[float]                       # [x,y,z, qx,qy,qz,qw]
+    tcp: list[float]                        # [x,y,z]
+
+
 class RunRequest(SQLModel):
     program_id: str | None = None
     waypoints: list[list[float]] | None = None   # 관절 경유점(rad)

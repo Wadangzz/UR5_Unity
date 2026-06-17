@@ -1,8 +1,8 @@
-"""기구학 비즈니스 로직 (IK)."""
+"""기구학 비즈니스 로직 (IK / FK)."""
 import numpy as np
 from app.core import ur5_model as ur5
 from app.core.robot_math import SE3
-from app.schemas import IKRequest, IKResponse
+from app.schemas import IKRequest, IKResponse, FKRequest, FKResponse
 
 
 def solve_ik(req: IKRequest) -> IKResponse:
@@ -11,3 +11,10 @@ def solve_ik(req: IKRequest) -> IKResponse:
     theta, ok = ur5.ik(T, seed)
     return IKResponse(theta=theta.tolist(), converged=bool(ok),
                       tcp=ur5.fk(theta)[:3, 3].tolist())
+
+
+def solve_fk(req: FKRequest) -> FKResponse:
+    T = ur5.fk(np.array(req.theta))
+    pos = T[:3, 3].tolist()
+    quat, _ = SE3.orientation(T)            # [x,y,z,w]
+    return FKResponse(pose=pos + quat, tcp=pos)

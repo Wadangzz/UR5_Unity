@@ -47,8 +47,45 @@ export interface JointMeta {
   upper: number
 }
 
+export interface IKResponse {
+  theta: number[]
+  converged: boolean
+  tcp: number[]
+}
+
+export interface FKResponse {
+  pose: number[]                   // [x,y,z, qx,qy,qz,qw]
+  tcp: number[]
+}
+
+export interface Pose {
+  id: number
+  program_id: string
+  x: number
+  y: number
+  z: number
+  qx: number
+  qy: number
+  qz: number
+  qw: number
+}
+
 export const getRobot = () => http.get<RobotInfo>('/robot').then((r) => r.data)
 export const getControllers = () =>
   http.get<ControllerSpec[]>('/controllers').then((r) => r.data)
 export const runSimulation = (req: RunRequest) =>
   http.post<RunResponse>('/run', req).then((r) => r.data)
+
+export const fk = (theta: number[]) =>
+  http.post<FKResponse>('/fk', { theta }).then((r) => r.data)
+export const ik = (pose: number[], seed?: number[]) =>
+  http.post<IKResponse>('/ik', { pose, seed }).then((r) => r.data)
+
+export const getProgram = (id: string) =>
+  http.get<Pose[]>(`/programs/${id}`).then((r) => r.data)
+export const savePose = (id: string, pose: number[]) => {
+  const [x, y, z, qx, qy, qz, qw] = pose
+  return http.post<Pose>(`/programs/${id}/poses`, { x, y, z, qx, qy, qz, qw }).then((r) => r.data)
+}
+export const resetProgram = (id: string) =>
+  http.delete(`/programs/${id}`).then((r) => r.data)
