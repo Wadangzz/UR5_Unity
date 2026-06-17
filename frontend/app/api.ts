@@ -56,10 +56,10 @@ export const CONTROLLERS: ControllerSpec[] = [
   },
   {
     name: 'impedance',
-    label: '임피던스 (직교)',
+    label: '임피던스',
     params: [
-      { key: 'kp', default: 600, min: 0, max: 3000, label: 'K (강성)' },
-      { key: 'kd', default: 60, min: 0, max: 400, label: 'D (감쇠)' },
+      { key: 'kp', default: 600, min: 0, max: 3000, label: 'K (강성, N/m)' },
+      { key: 'kd', default: 60, min: 0, max: 400, label: 'D (감쇠, N·s/m)' },
     ],
   },
 ];
