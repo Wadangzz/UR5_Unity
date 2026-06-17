@@ -30,6 +30,7 @@ export default function App() {
   const [targetTs, setTargetTs] = useState(0.6); // 목표 정착시간(s)
   const [payload, setPayload] = useState(0);
   const [modelScale, setModelScale] = useState(1);
+  const [pushForce, setPushForce] = useState(0); // 외란 외력 크기(N, +X)
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResponse | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -115,6 +116,7 @@ export default function App() {
         gains,
         payload,
         model_scale: modelScale,
+        disturbance: [pushForce, 0, 0],
         ...req,
       });
       setResult(res);
@@ -159,6 +161,8 @@ export default function App() {
           onPayloadChange={setPayload}
           modelScale={modelScale}
           onModelScaleChange={setModelScale}
+          pushForce={pushForce}
+          onPushForceChange={setPushForce}
           onRun={run}
           running={running}
         />

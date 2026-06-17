@@ -29,6 +29,7 @@ export interface RunRequest {
   hold?: number;
   payload?: number; // 끝단 미지 질량(kg), plant 에만
   model_scale?: number; // 컨트롤러 질량 배율(1.0=정확)
+  disturbance?: number[]; // 끝단 외력(base 프레임, N), 모션 후 인가
 }
 
 export interface RunResponse {

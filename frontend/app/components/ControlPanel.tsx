@@ -30,6 +30,8 @@ interface Props {
   onPayloadChange: (value: number) => void;
   modelScale: number;
   onModelScaleChange: (value: number) => void;
+  pushForce: number;
+  onPushForceChange: (value: number) => void;
   onRun: () => void;
   running: boolean;
 }
@@ -73,6 +75,8 @@ export default function ControlPanel({
   onPayloadChange,
   modelScale,
   onModelScaleChange,
+  pushForce,
+  onPushForceChange,
   onRun,
   running,
 }: Props) {
@@ -247,6 +251,27 @@ export default function ControlPanel({
                 onValueChange={([v]) => onModelScaleChange(v)}
               />
             </div>
+          </div>
+
+          {/* 외란: 모션 후 끝단에 가하는 외력(+X). 임피던스 컴플라이언스 시연용 */}
+          <div className='space-y-1.5 border-t pt-3'>
+            <p className='text-muted-foreground text-xs font-medium'>
+              외란 (외력)
+            </p>
+            <div className='flex items-center justify-between'>
+              <Label className='text-muted-foreground text-xs'>
+                밀치는 힘 (+X)
+              </Label>
+              <span className='text-xs tabular-nums'>{pushForce} N</span>
+            </div>
+            <Slider
+              min={0}
+              max={80}
+              step={5}
+              value={[pushForce]}
+              disabled={running}
+              onValueChange={([v]) => onPushForceChange(v)}
+            />
           </div>
 
           <Button

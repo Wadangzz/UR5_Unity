@@ -34,4 +34,4 @@ def run(req: RunRequest, session: Session):
     return sim.run_simulation(
         waypoints, controller=req.controller, gains=req.gains,
         gravity_comp=req.gravity_comp, t_seg=req.t_seg, hold=req.hold,
-        plant=plant, ctrl=ctrl)
+        plant=plant, ctrl=ctrl, disturbance=req.disturbance)

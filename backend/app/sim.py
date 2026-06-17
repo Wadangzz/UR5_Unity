@@ -29,7 +29,7 @@ def controller_specs():
 
 def run_simulation(waypoints, controller="computed_torque", gains=None,
                    gravity_comp=True, t_seg=1.2, hold=0.6, hz=30,
-                   plant=None, ctrl=None):
+                   plant=None, ctrl=None, disturbance=None):
     """관절 경유점(rad)을 제어기로 순회. → {t, theta, tcp, error, torque, waypoints_tcp}.
 
     plant=진짜 로봇 모델, ctrl=컨트롤러가 아는 모델. 둘 다 None 이면 공칭 MODEL
@@ -83,12 +83,23 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
         tau = Kp * e + Kd * ed                  # pd
         return tau + g_ctrl(th) if gravity_comp else tau
 
+    # 외란: base 프레임 외력(N)을 모션 종료(T) 후 끝단에 인가.
+    # 컨트롤러는 모르는 힘(plant 의 Ftip) → PID/CT 는 버티고 임피던스는 밀린다.
+    dist = np.asarray(disturbance, dtype=float) if disturbance else None
+    has_dist = dist is not None and np.any(dist)
+
+    def Ftip(t, th):
+        if not has_dist or t < T:
+            return np.zeros(6)
+        f_b = ur5.fk(th)[:3, :3].T @ dist     # base→EE 프레임 힘
+        return np.concatenate([np.zeros(3), f_b])  # [모멘트; 힘] (EE 프레임)
+
     def rhs(t, x):
         th, dth = x[:N], x[N:2 * N]
         I = x[2 * N:] if use_I else np.zeros(N)
         th_d, dth_d, ddth_d = ref(t)
         tau = torque(th, dth, th_d, dth_d, ddth_d, I)
-        ddth = Dynamics.forward_dynamics(th, dth, tau, ur5.GRAVITY, np.zeros(N), *plant)
+        ddth = Dynamics.forward_dynamics(th, dth, tau, ur5.GRAVITY, Ftip(t, th), *plant)
         parts = [dth, ddth] + ([th_d - th] if use_I else [])
         return np.concatenate(parts)
 

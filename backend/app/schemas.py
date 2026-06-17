@@ -48,6 +48,7 @@ class RunRequest(SQLModel):
     hold: float = 0.6
     payload: float = 0.0                         # 끝단 미지 질량(kg), plant 에만
     model_scale: float = 1.0                     # 컨트롤러 질량 배율(1.0=정확)
+    disturbance: list[float] = [0.0, 0.0, 0.0]   # 끝단 외력(base 프레임, N), 모션 후 인가
 
 
 class RunResponse(SQLModel):
