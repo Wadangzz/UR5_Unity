@@ -68,6 +68,7 @@ export interface Pose {
   qy: number
   qz: number
   qw: number
+  theta: number[]
 }
 
 export const getRobot = () => http.get<RobotInfo>('/robot').then((r) => r.data)
@@ -83,9 +84,11 @@ export const ik = (pose: number[], seed?: number[]) =>
 
 export const getProgram = (id: string) =>
   http.get<Pose[]>(`/programs/${id}`).then((r) => r.data)
-export const savePose = (id: string, pose: number[]) => {
+export const savePose = (id: string, pose: number[], theta: number[]) => {
   const [x, y, z, qx, qy, qz, qw] = pose
-  return http.post<Pose>(`/programs/${id}/poses`, { x, y, z, qx, qy, qz, qw }).then((r) => r.data)
+  return http
+    .post<Pose>(`/programs/${id}/poses`, { x, y, z, qx, qy, qz, qw, theta })
+    .then((r) => r.data)
 }
 export const resetProgram = (id: string) =>
   http.delete(`/programs/${id}`).then((r) => r.data)

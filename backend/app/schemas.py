@@ -10,6 +10,7 @@ class PoseIn(SQLModel):
     qy: float
     qz: float
     qw: float
+    theta: list[float] = []                  # 티치 시점 관절각(rad), 정확 재현용
 
 
 class ProgramSummary(SQLModel):

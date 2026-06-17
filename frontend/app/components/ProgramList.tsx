@@ -24,8 +24,8 @@ export default function ProgramList({ joints, onRunProgram, running }: Props) {
   const save = async () => {
     setBusy(true)
     try {
-      const r = await fk(joints)
-      await savePose(PID, r.pose)
+      const r = await fk(joints) // Cartesian(표시·이식) + 현재 관절각(정확 재현)
+      await savePose(PID, r.pose, joints)
       await refresh()
     } finally {
       setBusy(false)
