@@ -1,7 +1,7 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-import path from 'node:path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import path from 'node:path';
 
 // /api(REST) 와 /meshes(URDF·메시 정적) 는 FastAPI 백엔드(:8500)로 프록시.
 // → 프론트는 같은 출처로 fetch, CORS·경로 고민 없음.
@@ -9,7 +9,7 @@ import path from 'node:path'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, './app') },   // shadcn 별칭 (synex 컨벤션: 소스=app/)
+    alias: { '@': path.resolve(__dirname, './app') }, // shadcn 별칭 (synex 컨벤션: 소스=app/)
   },
   server: {
     proxy: {
@@ -17,4 +17,4 @@ export default defineConfig({
       '/meshes': 'http://localhost:8500',
     },
   },
-})
+});

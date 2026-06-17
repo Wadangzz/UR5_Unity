@@ -1,15 +1,15 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Slider } from '@/components/ui/slider';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import type { ControllerSpec, JointMeta } from "@/api";
+} from '@/components/ui/select';
+import type { ControllerSpec, JointMeta } from '@/api';
 
 interface Props {
   meta: JointMeta[];
@@ -38,13 +38,13 @@ function damping(kp?: number, kd?: number, ki?: number) {
   if (!kp || kp <= 0 || kd == null) return null;
   const wn = Math.sqrt(kp);
   const zeta = kd / (2 * wn);
-  const label = zeta < 0.97 ? "과소감쇠" : zeta > 1.03 ? "과감쇠" : "임계감쇠";
+  const label = zeta < 0.97 ? '과소감쇠' : zeta > 1.03 ? '과감쇠' : '임계감쇠';
   const color =
     zeta < 0.97
-      ? "text-amber-600"
+      ? 'text-amber-600'
       : zeta > 1.03
-        ? "text-blue-600"
-        : "text-emerald-600";
+        ? 'text-blue-600'
+        : 'text-emerald-600';
   const margin = ki && ki > 0 ? ki / (kp * kd) : null;
   return { wn, zeta, label, color, margin };
 }
@@ -72,16 +72,16 @@ export default function ControlPanel({
   const d = damping(gains.kp, gains.kd, gains.ki);
 
   return (
-    <Card className="w-72 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm">관절 제어</CardTitle>
+    <Card className='bg-card/95 supports-[backdrop-filter]:bg-card/80 w-72 backdrop-blur'>
+      <CardHeader className='pb-3'>
+        <CardTitle className='text-sm'>관절 제어</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className='space-y-4'>
         {meta.map((m, i) => (
-          <div key={m.name} className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">{m.name}</Label>
-              <span className="text-xs tabular-nums">
+          <div key={m.name} className='space-y-1.5'>
+            <div className='flex items-center justify-between'>
+              <Label className='text-muted-foreground text-xs'>{m.name}</Label>
+              <span className='text-xs tabular-nums'>
                 {toDeg(joints[i] ?? 0).toFixed(0)}°
               </span>
             </div>
@@ -96,15 +96,15 @@ export default function ControlPanel({
           </div>
         ))}
 
-        <div className="space-y-3 border-t pt-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">제어기</Label>
+        <div className='space-y-3 border-t pt-3'>
+          <div className='space-y-1.5'>
+            <Label className='text-muted-foreground text-xs'>제어기</Label>
             <Select
               value={controller}
               onValueChange={onControllerChange}
               disabled={running}
             >
-              <SelectTrigger className="w-full" size="sm">
+              <SelectTrigger className='w-full' size='sm'>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -119,12 +119,12 @@ export default function ControlPanel({
 
           {/* 제어기별 게인 슬라이더 */}
           {spec?.params.map((p) => (
-            <div key={p.key} className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground uppercase">
+            <div key={p.key} className='space-y-1.5'>
+              <div className='flex items-center justify-between'>
+                <Label className='text-muted-foreground text-xs uppercase'>
                   {p.key}
                 </Label>
-                <span className="text-xs tabular-nums">
+                <span className='text-xs tabular-nums'>
                   {(gains[p.key] ?? p.default).toFixed(0)}
                 </span>
               </div>
@@ -141,22 +141,22 @@ export default function ControlPanel({
 
           {/* 감쇠비 / 적분 안정여유 배지 */}
           {d && (
-            <div className="space-y-1 rounded-md bg-muted px-2.5 py-1.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="tabular-nums text-muted-foreground">
+            <div className='bg-muted space-y-1 rounded-md px-2.5 py-1.5 text-xs'>
+              <div className='flex items-center justify-between'>
+                <span className='text-muted-foreground tabular-nums'>
                   ζ={d.zeta.toFixed(2)} · ωn={d.wn.toFixed(1)}
                 </span>
                 <span className={`font-medium ${d.color}`}>{d.label}</span>
               </div>
               {d.margin != null && (
-                <div className="flex items-center justify-between border-t border-border/50 pt-1">
-                  <span className="tabular-nums text-muted-foreground">
+                <div className='border-border/50 flex items-center justify-between border-t pt-1'>
+                  <span className='text-muted-foreground tabular-nums'>
                     적분여유 Ki/(Kp·Kd)={d.margin.toFixed(2)}
                   </span>
                   <span
-                    className={`font-medium ${d.margin < 1 ? "text-emerald-600" : "text-red-600"}`}
+                    className={`font-medium ${d.margin < 1 ? 'text-emerald-600' : 'text-red-600'}`}
                   >
-                    {d.margin < 1 ? "안정" : "발산위험"}
+                    {d.margin < 1 ? '안정' : '발산위험'}
                   </span>
                 </div>
               )}
@@ -164,16 +164,16 @@ export default function ControlPanel({
           )}
 
           {/* 모델 불확실성: plant(진짜) ≠ controller(아는 모델) */}
-          <div className="space-y-3 border-t pt-3">
-            <p className="text-xs font-medium text-muted-foreground">
+          <div className='space-y-3 border-t pt-3'>
+            <p className='text-muted-foreground text-xs font-medium'>
               모델 불확실성
             </p>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">
+            <div className='space-y-1.5'>
+              <div className='flex items-center justify-between'>
+                <Label className='text-muted-foreground text-xs'>
                   페이로드 (미지 질량)
                 </Label>
-                <span className="text-xs tabular-nums">
+                <span className='text-xs tabular-nums'>
                   {payload.toFixed(1)} kg
                 </span>
               </div>
@@ -186,12 +186,12 @@ export default function ControlPanel({
                 onValueChange={([v]) => onPayloadChange(v)}
               />
             </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">
+            <div className='space-y-1.5'>
+              <div className='flex items-center justify-between'>
+                <Label className='text-muted-foreground text-xs'>
                   모델 질량배율
                 </Label>
-                <span className="text-xs tabular-nums">
+                <span className='text-xs tabular-nums'>
                   ×{modelScale.toFixed(2)}
                 </span>
               </div>
@@ -207,17 +207,17 @@ export default function ControlPanel({
           </div>
 
           <Button
-            className="w-full"
-            size="sm"
+            className='w-full'
+            size='sm'
             onClick={onRun}
             disabled={running}
           >
-            {running ? "재생 중…" : "Run ▶  home → 현재자세"}
+            {running ? '재생 중…' : 'Run ▶  home → 현재자세'}
           </Button>
           <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
+            variant='outline'
+            size='sm'
+            className='w-full'
             onClick={onReset}
             disabled={running}
           >

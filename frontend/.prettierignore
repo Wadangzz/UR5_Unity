@@ -1,0 +1,11 @@
+dist/
+build/
+node_modules/
+.prettierrc
+public/
+coverage/
+.vscode/
+.idea/
+.DS_Store
+*.config.js
+pnpm-lock.yaml

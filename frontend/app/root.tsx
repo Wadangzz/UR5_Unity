@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Grid } from "@react-three/drei";
-import RobotView from "@/components/RobotView";
-import ControlPanel from "@/components/ControlPanel";
-import PoseEditor from "@/components/PoseEditor";
-import ProgramList from "@/components/ProgramList";
-import Plots from "@/components/Plots";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Grid } from '@react-three/drei';
+import RobotView from '@/components/RobotView';
+import ControlPanel from '@/components/ControlPanel';
+import PoseEditor from '@/components/PoseEditor';
+import ProgramList from '@/components/ProgramList';
+import Plots from '@/components/Plots';
 import {
   getControllers,
   runSimulation,
@@ -13,13 +13,13 @@ import {
   type JointMeta,
   type RunRequest,
   type RunResponse,
-} from "@/api";
+} from '@/api';
 
 export default function App() {
   const [meta, setMeta] = useState<JointMeta[]>([]);
   const [joints, setJoints] = useState<number[]>([]);
   const [controllers, setControllers] = useState<ControllerSpec[]>([]);
-  const [controller, setController] = useState("computed_torque");
+  const [controller, setController] = useState('computed_torque');
   const [gains, setGains] = useState<Record<string, number>>({});
   const [payload, setPayload] = useState(0);
   const [modelScale, setModelScale] = useState(1);
@@ -104,17 +104,17 @@ export default function App() {
   const runProgram = (programId: string) => runReq({ program_id: programId });
 
   return (
-    <div className="relative h-screen w-screen bg-background">
-      <header className="pointer-events-none absolute left-0 top-0 z-10 p-4">
-        <h1 className="text-lg font-semibold tracking-tight text-foreground">
+    <div className='bg-background relative h-screen w-screen'>
+      <header className='pointer-events-none absolute top-0 left-0 z-10 p-4'>
+        <h1 className='text-foreground text-lg font-semibold tracking-tight'>
           UR5 Web Simulator
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className='text-muted-foreground text-sm'>
           react-three-fiber · urdf-loader · FastAPI
         </p>
       </header>
 
-      <div className="absolute right-4 top-4 z-10">
+      <div className='absolute top-4 right-4 z-10'>
         <ControlPanel
           meta={meta}
           joints={joints}
@@ -134,12 +134,16 @@ export default function App() {
         />
       </div>
 
-      <div className="absolute left-4 top-20 z-10 space-y-3">
+      <div className='absolute top-20 left-4 z-10 space-y-3'>
         <PoseEditor joints={joints} onSolved={setJoints} running={running} />
-        <ProgramList joints={joints} onRunProgram={runProgram} running={running} />
+        <ProgramList
+          joints={joints}
+          onRunProgram={runProgram}
+          running={running}
+        />
       </div>
 
-      <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
+      <div className='absolute bottom-4 left-1/2 z-10 -translate-x-1/2'>
         <Plots result={result} />
       </div>
 
@@ -161,8 +165,8 @@ export default function App() {
           sectionThickness={1}
           infiniteGrid
           fadeDistance={8}
-          cellColor="#d4d4d4"
-          sectionColor="#a3a3a3"
+          cellColor='#d4d4d4'
+          sectionColor='#a3a3a3'
         />
         <OrbitControls target={[0, 0.4, 0]} enableDamping />
       </Canvas>
