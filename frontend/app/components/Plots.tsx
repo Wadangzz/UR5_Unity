@@ -39,7 +39,19 @@ export default function Plots({ result }: { result: RunResponse | null }) {
   return (
     <Card className='bg-card/95 supports-[backdrop-filter]:bg-card/80 w-[560px] backdrop-blur'>
       <CardHeader className='pb-2'>
-        <CardTitle className='text-sm'>시뮬 결과</CardTitle>
+        <div className='flex items-center justify-between'>
+          <CardTitle className='text-sm'>시뮬 결과</CardTitle>
+          {result.diverged ? (
+            <span className='text-xs font-medium text-red-600'>⚠ 발산</span>
+          ) : result.settle_time != null ? (
+            <span className='text-muted-foreground text-xs tabular-nums'>
+              정착 {result.settle_time.toFixed(2)}s · 정상상태오차{' '}
+              {(result.steady_state_error ?? 0).toFixed(3)} rad
+            </span>
+          ) : (
+            <span className='text-xs font-medium text-amber-600'>미정착</span>
+          )}
+        </div>
       </CardHeader>
       <CardContent className='flex gap-4'>
         <div className='flex-1'>

@@ -38,6 +38,9 @@ export interface RunResponse {
   error: number[];
   torque: number[][]; // [frame][6]
   waypoints_tcp: number[][];
+  settle_time: number | null; // 평형 도달 시각(s), 미도달 null
+  steady_state_error: number | null; // 정상상태 오차(rad)
+  diverged: boolean; // 발산 여부
 }
 
 // URDF 에서 추출한 관절 메타 (슬라이더 범위용, rad)
