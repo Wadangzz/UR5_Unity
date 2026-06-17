@@ -15,6 +15,13 @@ export interface ControllerSpec {
   params: { key: string; default: number; min: number; max: number }[]
 }
 
+// URDF 에서 추출한 관절 메타 (슬라이더 범위용, rad)
+export interface JointMeta {
+  name: string
+  lower: number
+  upper: number
+}
+
 async function json<T>(r: Response): Promise<T> {
   if (!r.ok) throw new Error(`${r.status} ${r.url}`)
   return r.json() as Promise<T>
