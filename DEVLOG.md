@@ -104,12 +104,47 @@ SO(3)/SE(3) 군 vs so(3)/se(3) 대수·manipulability 특이점 판정.
 
 ---
 
+## 2026-06-18
+
+### 🎯 오늘 한 것 — 속도제어(resolved-rate) + 리뷰/정리 (develop)
+
+**속도제어 추가 (MR §11.3)** ← 메인
+- 토크제어(2차계, `forward_dynamics`)와 **별개 plant** 도입: 속도입력은 **1차계** —
+  θ̇ 가 곧 제어출력, θ 만 적분(기구학 시뮬), stiff 아님 → **RK45**(Radau 불필요, 더 빠름)
+- `sim.py`: `run_simulation` 을 **디스패처**로 분리
+  - `_run_torque` (기존 본체 그대로 — 토크 4종 회귀 검증, 동작 불변)
+  - `_run_velocity` (신규): **joint_velocity**(§11.3.2 `θ̇=θ̇_d+Kp·e+Ki∫e`),
+    **resolved_rate**(§11.3.3 `Vb=Ad_{X⁻¹X_d}·V_d+Kp·Xe`, `θ̇=J†_b·Vb`, `Xe=log(X⁻¹X_d)`)
+  - 공유 헬퍼 추출: `_make_ref` · `_detect_settle` · `_keep_idx` · `_blowup_event`
+- `ur5_model.dls_inv` 공개(별칭) — resolved-rate 가 J† 재사용(특이점 자동 감쇠)
+- `schemas.RunResponse.qdot` 신설(속도제어 출력 rad/s, 토크모드는 빈 배열)
+- 프론트: `CONTROLLERS` 속도제어 2종(kp/ki, **kd 없음**) + **`POLE_PLACE` 상수**로
+  자동튜닝(극배치=2차계용) 가시성 중앙화 / `Plots` 는 qdot 있으면 **θ̇** 표시
+- 검증: 수렴 sse 1e-6~1e-8, home 특이점서 DLS 로 θ̇ 유계(발산 없음), API 200, tsc/eslint 0
+
+**리뷰 / 정리**
+- `robots.py` **제거**: 앱 미사용·기구학전용·mm단위. `ur5_model`(`_IKAdapter`)이 이미 대체.
+  범용화는 추후 **URDF→{Mlist,Glist,Slist} 로더**로(멀티로봇 TODO와 일치) — 방향이 다름
+- **PDF 읽기 환경**: `pypdf` dev 추가, Modern Robotics 교재를 `docs/`(gitignore, 로컬)에 비치.
+  페이지 오프셋 **+18**(인쇄 p.1 = PDF p.19). `ruff` dev 추가(설정만 있고 미설치였음)
+- `PoseEditor` σ_min 라벨 정리(Manipulability 표기)
+
+**개념 정리(대화):** 속도제어 vs 토크제어(1차계 vs 2차계, plant 자체가 다름)·
+resolved-rate(`J†`, `Ad_{X⁻¹X_d}` 피드포워드 트위스트)·**임피던스 구현이 MR (11.65)의
+M=0+중력보상 단순화형과 정확히 일치**함을 교재 대조로 검증.
+
+### ✅ 오늘 커밋 (develop)
+- `63f65e2` feat: 속도제어 — resolved-rate + 관절속도 (MR §11.3) + robots.py 제거
+
+---
+
 ## 📋 다음 할 것 (TODO)
 
 - [ ] **멀티로봇** — (b) 백엔드 큐레이션(robot_descriptions ur5/ur10/panda/iiwa) + 프론트 선택,
       `mr_urdf_loader` 로 `{Mlist,Glist,Slist}` 추출(sim 이미 인자로 소비), 메시 서빙 일반화.
       → 그 뒤 (a) **URDF 업로드**(메시 동반 필요)
-- [ ] **속도제어**(관절 θ̇_d 적분→추종 / 직교 resolved-rate `J†`) + **순수 토크 입력 모드**
+- [x] **속도제어**(관절 θ̇_d / 직교 resolved-rate `J†`) ✅ 2026-06-18
+      └ **순수 토크 입력 모드**(§11.4)는 τ 입력 스키마 필요 → 보류
 - [ ] **힘제어**(hybrid position/force)·어드미턴스, **마찰·토크포화·센서노이즈** 현실 모델
 - [ ] 특이점: resolved-rate 에 DLS `J†`, 조작성 게이지(σ_min 이미 표시)
 - [ ] **Docker** 배포 + README 재작성(웹 기준)
