@@ -33,6 +33,10 @@ interface Props {
   onPayloadChange: (value: number) => void;
   modelScale: number;
   onModelScaleChange: (value: number) => void;
+  friction: number;
+  onFrictionChange: (value: number) => void;
+  tauMax: number;
+  onTauMaxChange: (value: number) => void;
   push: number[];
   onPushAxisChange: (index: number, value: number) => void;
   onRun: () => void;
@@ -81,6 +85,10 @@ export default function ControlPanel({
   onPayloadChange,
   modelScale,
   onModelScaleChange,
+  friction,
+  onFrictionChange,
+  tauMax,
+  onTauMaxChange,
   push,
   onPushAxisChange,
   onRun,
@@ -277,6 +285,42 @@ export default function ControlPanel({
                 value={[modelScale]}
                 disabled={running}
                 onValueChange={([v]) => onModelScaleChange(v)}
+              />
+            </div>
+
+            {/* 현실 모델 (토크 plant 한정): 마찰→PD 정상상태오차, 포화→성능한계 */}
+            <div className='space-y-1.5'>
+              <div className='flex items-center justify-between'>
+                <Label className='text-muted-foreground text-xs'>
+                  마찰 (쿨롱)
+                </Label>
+                <span className='text-xs tabular-nums'>{friction} N·m</span>
+              </div>
+              <Slider
+                min={0}
+                max={30}
+                step={1}
+                value={[friction]}
+                disabled={running}
+                onValueChange={([v]) => onFrictionChange(v)}
+              />
+            </div>
+            <div className='space-y-1.5'>
+              <div className='flex items-center justify-between'>
+                <Label className='text-muted-foreground text-xs'>
+                  토크 한계
+                </Label>
+                <span className='text-xs tabular-nums'>
+                  {tauMax === 0 ? '무제한' : `${tauMax} N·m`}
+                </span>
+              </div>
+              <Slider
+                min={0}
+                max={150}
+                step={5}
+                value={[tauMax]}
+                disabled={running}
+                onValueChange={([v]) => onTauMaxChange(v)}
               />
             </div>
           </div>

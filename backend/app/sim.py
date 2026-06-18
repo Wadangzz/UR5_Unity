@@ -29,7 +29,8 @@ VELOCITY_CONTROLLERS = ("joint_velocity", "resolved_rate")
 
 def run_simulation(waypoints, controller="computed_torque", gains=None,
                    gravity_comp=True, t_seg=1.2, hold=0.6, hz=30,
-                   plant=None, ctrl=None, disturbance=None, traj_mode="joint"):
+                   plant=None, ctrl=None, disturbance=None, traj_mode="joint",
+                   friction=0.0, tau_max=0.0):
     """관절 경유점(rad)을 제어기로 순회. → {t, theta, tcp, error, torque, qdot, ...}.
 
     궤적생성(traj_mode)과 제어기는 직교(독립):
@@ -53,7 +54,7 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
         result = _run_velocity(WP, ref, T, controller, gains, hz)
     else:
         result = _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
-                             plant, ctrl, disturbance)
+                             plant, ctrl, disturbance, friction, tau_max)
     result["traj_error"] = traj_error
     return result
 
@@ -215,7 +216,7 @@ def _keep_idx(sol, settle_time, diverged, T):
 #  동역학 plant — 토크 입력 (PD / PID / Computed Torque / 임피던스)
 # ----------------------------------------------------------------------
 def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
-                plant, ctrl, disturbance):
+                plant, ctrl, disturbance, friction=0.0, tau_max=0.0):
     Kp = float(gains.get("kp", 100.0))
     Kd = float(gains.get("kd", 20.0))
     Ki = float(gains.get("ki", 0.0))
@@ -258,11 +259,18 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
         f_b = ur5.fk(th)[:3, :3].T @ dist     # base→EE 프레임 힘
         return np.concatenate([np.zeros(3), f_b])  # [모멘트; 힘] (EE 프레임)
 
+    def applied(th, dth, th_d, dth_d, ddth_d, I):
+        """액추에이터가 실제 내는 토크 = 명령 토크에 포화 적용(plot 도 이 값)."""
+        tau = torque(th, dth, th_d, dth_d, ddth_d, I)
+        return np.clip(tau, -tau_max, tau_max) if tau_max > 0 else tau
+
     def rhs(t, x):
         th, dth = x[:N], x[N:2 * N]
         I = x[2 * N:] if use_I else np.zeros(N)
         th_d, dth_d, ddth_d = ref(t)
-        tau = torque(th, dth, th_d, dth_d, ddth_d, I)
+        tau = applied(th, dth, th_d, dth_d, ddth_d, I)
+        if friction > 0:        # 쿨롱 마찰(plant 반력, 운동 반대·tanh 평활로 chatter 방지)
+            tau = tau - friction * np.tanh(dth / 0.02)
         ddth = Dynamics.forward_dynamics(th, dth, tau, ur5.GRAVITY, Ftip(t, th), *plant)
         parts = [dth, ddth] + ([th_d - th] if use_I else [])
         return np.concatenate(parts)
@@ -295,7 +303,7 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
         th_d, dth_d, ddth_d = ref(sol.t[i])
         tcp.append(ur5.fk(TH[i])[:3, 3].tolist())
         error.append(float(err[i]))
-        torque_log.append([float(v) for v in torque(TH[i], DTH[i], th_d, dth_d, ddth_d, II[i])])
+        torque_log.append([float(v) for v in applied(TH[i], DTH[i], th_d, dth_d, ddth_d, II[i])])
 
     return {
         "t": sol.t[idx].tolist(),

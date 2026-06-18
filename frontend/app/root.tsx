@@ -32,6 +32,8 @@ export default function App() {
   const [targetTs, setTargetTs] = useState(0.6); // 목표 정착시간(s)
   const [payload, setPayload] = useState(0);
   const [modelScale, setModelScale] = useState(1);
+  const [friction, setFriction] = useState(0); // 관절 쿨롱 마찰(N·m)
+  const [tauMax, setTauMax] = useState(0); // 토크 한계(N·m, 0=무제한)
   const [push, setPush] = useState<number[]>([0, 0, 0]); // 외란 외력(N, base XYZ)
   const setPushAxis = (index: number, value: number) =>
     setPush((prev) => prev.map((p, i) => (i === index ? value : p)));
@@ -134,6 +136,8 @@ export default function App() {
         payload,
         model_scale: modelScale,
         disturbance: push,
+        friction,
+        tau_max: tauMax,
         ...req,
       });
       setResult(res);
@@ -182,6 +186,10 @@ export default function App() {
           onPayloadChange={setPayload}
           modelScale={modelScale}
           onModelScaleChange={setModelScale}
+          friction={friction}
+          onFrictionChange={setFriction}
+          tauMax={tauMax}
+          onTauMaxChange={setTauMax}
           push={push}
           onPushAxisChange={setPushAxis}
           onRun={run}

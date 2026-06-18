@@ -53,6 +53,8 @@ class RunRequest(SQLModel):
     payload: float = 0.0                         # 끝단 미지 질량(kg), plant 에만
     model_scale: float = 1.0                     # 컨트롤러 질량 배율(1.0=정확)
     disturbance: list[float] = [0.0, 0.0, 0.0]   # 끝단 외력(base 프레임, N), 모션 후 인가
+    friction: float = 0.0                        # 관절 쿨롱 마찰(N·m, plant) — 토크 제어만
+    tau_max: float = 0.0                         # 액추에이터 토크 한계(N·m, 0=무제한)
 
 
 class RunResponse(SQLModel):
