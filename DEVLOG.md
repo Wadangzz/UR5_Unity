@@ -199,11 +199,13 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 - [x] **task-space 궤적**(직교 직선, §9) + 비특이 ready 자세 ✅ 2026-06-18
 - [x] 특이점: resolved-rate DLS `J†` + manipulability(σ_min) 라이브 표시 ✅
 - [x] **현실모델 — 마찰·토크포화** ✅ 2026-06-18 (└ 센서노이즈는 보류)
-- [ ] **동역학 고속화 (Numba JIT)** — `forward_dynamics` ~3ms→~50µs 목표(호출 오버헤드 제거).
-      이게 선행되면 **이산 ZOH 제어 루프**(실전 시뮬) → 센서노이즈·제어율 노브가 다 열림.
-      (시도/보류 경위는 2026-06-18 로그 참조) → 실험 브랜치에서 진행
+- [x] **동역학 고속화 (Numba JIT)** ✅ (branch `numba-dynamics`) — `dynamics_fast.py` @njit RNE,
+      numpy 와 비트일치, fd 3.5ms→254µs(~14x), 시뮬 2-3.5s→~0.3s(~7x). 부팅 warmup.
+- [x] **이산 ZOH 제어 + 센서노이즈** ✅ (branch) — `control_rate`(0=연속/>0=이산), 하이브리드.
+      제어율 낮추면 불안정 재현, 노이즈 chatter. numba 덕에 1kHz ~4s 현실화.
 - [ ] **힘제어**(hybrid position/force §11.6) — 렌치 `τ=Jᵀ·F` + 접촉/환경 모델 선행 필요
-- [ ] **센서노이즈** — 이산 ZOH 루프 위에서 구현(동역학 고속화 후)
+- [ ] **`numba-dynamics` 브랜치 → develop 머지** (검증 끝나면)
+- [ ] (선택) fd 추가 최적화: 해석적 SE(3) 역행렬 → 이산 더 빠르게(2kHz 기본 가능)
 - [ ] **redundancy/널공간** 제어(7-DOF, `(I−J†J)θ̇₀`) — 멀티로봇 후
 - [ ] **Docker** 배포 + README 재작성(웹 기준)
 
