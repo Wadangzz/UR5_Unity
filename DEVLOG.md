@@ -148,9 +148,27 @@ M=0+중력보상 단순화형과 정확히 일치**함을 교재 대조로 검�
   에선 결정됨(이산 branch)**, **7-DOF(Panda/iiwa)부터 1자유도 자유** → `θ̇=J†V+(I−J†J)θ̇₀`
   널공간으로 자세 능동제어(선호자세·관절한계회피·manipulability↑). 멀티로봇 단계에서 의미.
 
+**라이브 표시 + task-space 궤적 + ready 자세**
+- **재생 중 라이브 표시**: 백엔드가 θ(t) 계산 시 EE pose·σ_min 시계열을 응답에 실어
+  보내고(프레임당 REST 금지 원칙), 재생 시 PoseEditor 직교좌표·σ_min 배지가 실시간 갱신.
+- **task-space 궤적**(MR §9): `traj_mode=joint|task`. 궤적생성⊥제어기 — task 는 직교 SE(3)
+  직선보간→IK 샘플(precompute)→θ_d. **제어기 7종 무수정**으로 직선 추종(직선이탈 0.0mm
+  vs joint 27mm 곡선). 특이점/작업영역밖서 IK 실패·관절속도 폭발 시 절단+`traj_error`(=옳음).
+  · sim.py 궤적생성 중앙화(`_build_ref`), `_run_*` 시그니처 `(WP, ref, T, ...)` 통일.
+- **비특이 ready 자세**: kinematic zero(전관절0)=특이점이라 task 출발점으로 부적합 →
+  실제 UR 처럼 `READY=[0,-90,90,-90,-90,0]`(σ_min≈0.22) 정의·`/api/robot` 노출, 초기/Run 출발.
+  영점 버튼은 특이점 시연용 유지. **프로그램 실행은 현재 자세에서 출발**(start 필드).
+
+**개념 정리(대화 2):** joint 궤적(θ 보간, 말단 곡선) vs task 궤적(X 보간, 말단 직선)·
+제어기 native 공간 분류(관절 4 / task 3, FK·IK 로 상호변환 가능)·**task 궤적의 특이점
+IK 실패는 버그가 아니라 물리적으로 옳은 거동**(직교 직선은 특이점서 실행불가)·kinematic
+zero(특이점) vs 운용 ready 자세(비특이) 구분.
+
 ### ✅ 오늘 커밋 (develop)
 - `63f65e2` feat: 속도제어 — resolved-rate + 관절속도 (MR §11.3) + robots.py 제거
 - `c588de0` feat: 어드미턴스 제어 (MR §11.7.2) — 임피던스의 쌍
+- `ded793b` feat: 재생 중 직교좌표·manipulability 라이브 표시
+- `3a7109c` feat: task-space 궤적(직교 직선) + 비특이 ready 자세 + 프로그램 현재자세 출발
 
 ---
 
@@ -162,9 +180,10 @@ M=0+중력보상 단순화형과 정확히 일치**함을 교재 대조로 검�
 - [x] **속도제어**(관절 θ̇_d / 직교 resolved-rate `J†`) ✅ 2026-06-18
       └ **순수 토크 입력 모드**(§11.4)는 τ 입력 스키마 필요 → 보류
 - [x] **어드미턴스**(§11.7.2) ✅ 2026-06-18
+- [x] **task-space 궤적**(직교 직선, §9) + 비특이 ready 자세 ✅ 2026-06-18
+- [x] 특이점: resolved-rate DLS `J†` + manipulability(σ_min) 라이브 표시 ✅
 - [ ] **힘제어**(hybrid position/force §11.6), **마찰·토크포화·센서노이즈** 현실 모델
 - [ ] **redundancy/널공간** 제어(7-DOF, `(I−J†J)θ̇₀`) — 멀티로봇 후
-- [ ] 특이점: resolved-rate 에 DLS `J†`, 조작성 게이지(σ_min 이미 표시)
 - [ ] **Docker** 배포 + README 재작성(웹 기준)
 
 ### ⚠️ 주의/메모
