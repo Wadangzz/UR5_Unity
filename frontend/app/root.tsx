@@ -34,6 +34,8 @@ export default function App() {
   const [modelScale, setModelScale] = useState(1);
   const [friction, setFriction] = useState(0); // 관절 쿨롱 마찰(N·m)
   const [tauMax, setTauMax] = useState(0); // 토크 한계(N·m, 0=무제한)
+  const [controlRate, setControlRate] = useState(0); // 0=연속, >0=이산 ZOH(Hz)
+  const [noise, setNoise] = useState(0); // 센서 노이즈 std(rad)
   const [push, setPush] = useState<number[]>([0, 0, 0]); // 외란 외력(N, base XYZ)
   const setPushAxis = (index: number, value: number) =>
     setPush((prev) => prev.map((p, i) => (i === index ? value : p)));
@@ -138,6 +140,8 @@ export default function App() {
         disturbance: push,
         friction,
         tau_max: tauMax,
+        control_rate: controlRate,
+        noise,
         ...req,
       });
       setResult(res);
@@ -190,6 +194,10 @@ export default function App() {
           onFrictionChange={setFriction}
           tauMax={tauMax}
           onTauMaxChange={setTauMax}
+          controlRate={controlRate}
+          onControlRateChange={setControlRate}
+          noise={noise}
+          onNoiseChange={setNoise}
           push={push}
           onPushAxisChange={setPushAxis}
           onRun={run}

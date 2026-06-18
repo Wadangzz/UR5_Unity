@@ -37,6 +37,10 @@ interface Props {
   onFrictionChange: (value: number) => void;
   tauMax: number;
   onTauMaxChange: (value: number) => void;
+  controlRate: number;
+  onControlRateChange: (value: number) => void;
+  noise: number;
+  onNoiseChange: (value: number) => void;
   push: number[];
   onPushAxisChange: (index: number, value: number) => void;
   onRun: () => void;
@@ -106,6 +110,10 @@ export default function ControlPanel({
   onFrictionChange,
   tauMax,
   onTauMaxChange,
+  controlRate,
+  onControlRateChange,
+  noise,
+  onNoiseChange,
   push,
   onPushAxisChange,
   onRun,
@@ -369,6 +377,45 @@ export default function ControlPanel({
                 value={[tauMax]}
                 disabled={running}
                 onValueChange={([v]) => onTauMaxChange(v)}
+              />
+            </div>
+
+            {/* 제어 모드: 연속(이상) vs 이산 ZOH(실제 디지털, 낮추면 불안정) */}
+            <div className='space-y-1.5'>
+              <Label className='text-muted-foreground text-xs'>제어율</Label>
+              <Select
+                value={String(controlRate)}
+                onValueChange={(v) => onControlRateChange(Number(v))}
+                disabled={running}
+              >
+                <SelectTrigger className='w-full' size='sm'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='0'>연속 (이상)</SelectItem>
+                  <SelectItem value='2000'>이산 2000 Hz</SelectItem>
+                  <SelectItem value='1000'>이산 1000 Hz</SelectItem>
+                  <SelectItem value='500'>이산 500 Hz</SelectItem>
+                  <SelectItem value='200'>이산 200 Hz</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className='space-y-1.5'>
+              <div className='flex items-center justify-between'>
+                <Label className='text-muted-foreground text-xs'>
+                  센서 노이즈
+                </Label>
+                <span className='text-xs tabular-nums'>
+                  {noise === 0 ? '없음' : `${noise.toFixed(3)} rad`}
+                </span>
+              </div>
+              <Slider
+                min={0}
+                max={0.02}
+                step={0.001}
+                value={[noise]}
+                disabled={running}
+                onValueChange={([v]) => onNoiseChange(v)}
               />
             </div>
           </div>

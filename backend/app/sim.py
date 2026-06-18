@@ -43,7 +43,7 @@ def warmup():
 def run_simulation(waypoints, controller="computed_torque", gains=None,
                    gravity_comp=True, t_seg=1.2, hold=0.6, hz=30,
                    plant=None, ctrl=None, disturbance=None, traj_mode="joint",
-                   friction=0.0, tau_max=0.0):
+                   friction=0.0, tau_max=0.0, control_rate=0.0, noise=0.0):
     """관절 경유점(rad)을 제어기로 순회. → {t, theta, tcp, error, torque, qdot, ...}.
 
     궤적생성(traj_mode)과 제어기는 직교(독립):
@@ -67,7 +67,8 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
         result = _run_velocity(WP, ref, T, controller, gains, hz)
     else:
         result = _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
-                             plant, ctrl, disturbance, friction, tau_max)
+                             plant, ctrl, disturbance, friction, tau_max,
+                             control_rate, noise)
     result["traj_error"] = traj_error
     return result
 
@@ -167,6 +168,12 @@ def _build_ref(WP, t_seg, hold, traj_mode):
     return ref, T_eff, traj_error
 
 
+class _SolShim:
+    """이산 ZOH 적분 결과를 solve_ivp 의 sol(.t/.y/.status)과 호환되게 담는 객체.
+    + tau_log(샘플별 실제 인가 토크, 노이즈 chatter 포함)."""
+    __slots__ = ("t", "y", "status", "tau_log")
+
+
 def _empty_result(WP, traj_error):
     """궤적 생성 실패 시 빈 결과(재생할 것 없음 + 사유)."""
     return {
@@ -178,7 +185,7 @@ def _empty_result(WP, traj_error):
 
 
 def _blowup_event():
-    """위치 또는 속도가 폭주하면 즉시 적분 종료(발산 적분 길어짐 방지)."""
+    """연속 적분(Radau)용: 위치/속도 폭주 시 즉시 종료(발산 적분 길어짐 방지)."""
     def blowup(t, x):
         return min(THETA_MAX - float(np.max(np.abs(x[:N]))),
                    OMEGA_MAX - float(np.max(np.abs(x[N:2 * N]))))
@@ -208,8 +215,11 @@ def _detect_settle(sol, T, err, vmax, hz):
     if rest is not None:
         return False, float(sol.t[rest]), float(err[rest])
 
-    win = max(1, int(0.5 * hz))         # 평형 미도달 + 오차 증가추세면 발산
-    if len(err) > win and err[-1] > err[-1 - win] * 1.05:
+    # 평형 미도달 + 오차 증가추세 + 절대오차도 유의미하게 클 때만 발산 판정.
+    # (이산 ZOH 는 미세 task오차에서 trend 만으로 오판하기 쉬움 → 절대 임계 추가)
+    win = max(1, int(0.5 * hz))
+    if (len(err) > win and err[-1] > err[-1 - win] * 1.05
+            and err[-1] > 0.05):
         return True, None, None
     return False, None, None
 
@@ -229,7 +239,8 @@ def _keep_idx(sol, settle_time, diverged, T):
 #  동역학 plant — 토크 입력 (PD / PID / Computed Torque / 임피던스)
 # ----------------------------------------------------------------------
 def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
-                plant, ctrl, disturbance, friction=0.0, tau_max=0.0):
+                plant, ctrl, disturbance, friction=0.0, tau_max=0.0,
+                control_rate=0.0, noise=0.0):
     Kp = float(gains.get("kp", 100.0))
     Kd = float(gains.get("kd", 20.0))
     Ki = float(gains.get("ki", 0.0))
@@ -280,24 +291,84 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
         tau = torque(th, dth, th_d, dth_d, ddth_d, I)
         return np.clip(tau, -tau_max, tau_max) if tau_max > 0 else tau
 
-    def rhs(t, x):
-        th, dth = x[:N], x[N:2 * N]
-        I = x[2 * N:] if use_I else np.zeros(N)
-        th_d, dth_d, ddth_d = ref(t)
-        tau = applied(th, dth, th_d, dth_d, ddth_d, I)
-        if friction > 0:        # 쿨롱 마찰(plant 반력, 운동 반대·tanh 평활로 chatter 방지)
-            tau = tau - friction * np.tanh(dth / 0.02)
-        ddth = df.forward_dynamics(th, dth, tau, ur5.GRAVITY, Ftip(t, th), Mp, Gp, Sp)
-        parts = [dth, ddth] + ([th_d - th] if use_I else [])
-        return np.concatenate(parts)
-
-    x0 = np.concatenate([WP[0], np.zeros(N)] + ([np.zeros(N)] if use_I else []))
+    # 제어 모드: control_rate=0 → 연속(이상화, 빠른 Radau) / >0 → 이산 ZOH(현실).
+    # 노이즈는 이산 샘플링이 필요하므로 control_rate=0 이면 기본 제어율로 이산화한다.
     T_cap = T + SETTLE_MAX
-    t_eval = np.linspace(0, T_cap, int(T_cap * hz) + 1)
-    # PD/PID 폐루프는 stiff(고주파) → 명시적 RK45는 스텝 폭발(수십 초).
-    # 암시적 Radau 로 ~20-30배 빠름. 허용오차는 시각화용이라 완화(30Hz 샘플엔 충분).
-    sol = solve_ivp(rhs, (0, T_cap), x0, t_eval=t_eval, method="Radau",
-                    rtol=1e-4, atol=1e-7, events=_blowup_event())
+    rate = control_rate
+    if noise > 0 and rate <= 0:
+        rate = 1000.0
+
+    def _continuous():
+        """연속 제어(제어율 ∞ 이상화) — 암시적 Radau. 빠르고 항상 안정적."""
+        def rhs(t, x):
+            th, dth = x[:N], x[N:2 * N]
+            I = x[2 * N:] if use_I else np.zeros(N)
+            th_d, dth_d, ddth_d = ref(t)
+            tau = applied(th, dth, th_d, dth_d, ddth_d, I)
+            if friction > 0:
+                tau = tau - friction * np.tanh(dth / 0.02)
+            ddth = df.forward_dynamics(th, dth, tau, ur5.GRAVITY, Ftip(t, th), Mp, Gp, Sp)
+            parts = [dth, ddth] + ([th_d - th] if use_I else [])
+            return np.concatenate(parts)
+
+        x0 = np.concatenate([WP[0], np.zeros(N)] + ([np.zeros(N)] if use_I else []))
+        t_eval = np.linspace(0, T_cap, int(T_cap * hz) + 1)
+        s = solve_ivp(rhs, (0, T_cap), x0, t_eval=t_eval, method="Radau",
+                      rtol=1e-4, atol=1e-7, events=_blowup_event())
+        s.tau_log = None                            # 패킹 때 applied()로 재계산
+        return s
+
+    def _zoh(rate):
+        """이산 ZOH 제어(실제 디지털 제어) — rate(Hz) 샘플·토크 ZOH 유지, plant 는 RK4.
+        제어율이 낮으면 불안정해지는 실제 현상이 그대로 나타난다. 노이즈 주입 가능."""
+        h = 1.0 / rate
+        n_ticks = int(T_cap * rate) + 1
+        out_every = max(1, round(rate / hz))
+        if noise > 0:
+            rng = np.random.default_rng(0)          # 결정적 노이즈 realization
+            n_pos = noise * rng.standard_normal((n_ticks, N))
+            n_vel = 5.0 * noise * rng.standard_normal((n_ticks, N))
+        th, dth, I = WP[0].copy(), np.zeros(N), np.zeros(N)
+        ts, THl, DTHl, IIl, taul = [], [], [], [], []
+        diverged = False
+        for k in range(n_ticks):
+            t = k * h
+            th_d, dth_d, ddth_d = ref(t)
+            thm = th + n_pos[k] if noise > 0 else th    # 센서 측정값(노이즈 포함)
+            dthm = dth + n_vel[k] if noise > 0 else dth
+            tau = applied(thm, dthm, th_d, dth_d, ddth_d, I)   # ZOH: h 동안 유지
+
+            def f(x):                               # plant: tau 고정, 마찰 연속
+                q, qd = x[:N], x[N:]
+                tn = tau - friction * np.tanh(qd / 0.02) if friction > 0 else tau
+                qdd = df.forward_dynamics(q, qd, tn, ur5.GRAVITY, Ftip(t, q), Mp, Gp, Sp)
+                return np.concatenate([qd, qdd])
+
+            x = np.concatenate([th, dth])
+            k1 = f(x); k2 = f(x + 0.5 * h * k1)
+            k3 = f(x + 0.5 * h * k2); k4 = f(x + h * k3)
+            x = x + (h / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+            th, dth = x[:N], x[N:]
+            if (not np.all(np.isfinite(x))
+                    or np.max(np.abs(th)) > THETA_MAX
+                    or np.max(np.abs(dth)) > OMEGA_MAX):
+                diverged = True
+                break
+            if use_I:
+                I = I + (th_d - thm) * h             # 이산 적분(측정 오차 기준)
+            if k % out_every == 0:
+                ts.append(t); THl.append(th.copy()); DTHl.append(dth.copy())
+                IIl.append(I.copy()); taul.append(tau.copy())
+
+        s = _SolShim()
+        s.t = np.array(ts)
+        rows = [np.array(THl).T, np.array(DTHl).T] + ([np.array(IIl).T] if use_I else [])
+        s.y = np.vstack(rows) if ts else np.zeros((2 * N + (N if use_I else 0), 0))
+        s.status = 1 if diverged else 0
+        s.tau_log = np.array(taul) if ts else np.zeros((0, N))
+        return s
+
+    sol = _zoh(rate) if rate > 0 else _continuous()
 
     TH, DTH = sol.y[:N].T, sol.y[N:2 * N].T
     II = sol.y[2 * N:].T if use_I else np.zeros((len(sol.t), N))
@@ -316,10 +387,14 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
 
     tcp, error, torque_log = [], [], []
     for i in idx:
-        th_d, dth_d, ddth_d = ref(sol.t[i])
         tcp.append(ur5.fk(TH[i])[:3, 3].tolist())
         error.append(float(err[i]))
-        torque_log.append([float(v) for v in applied(TH[i], DTH[i], th_d, dth_d, ddth_d, II[i])])
+        if sol.tau_log is not None:                 # 이산: 기록된 ZOH 토크(노이즈 포함)
+            torque_log.append([float(v) for v in sol.tau_log[i]])
+        else:                                       # 연속: applied()로 재계산
+            th_d, dth_d, ddth_d = ref(sol.t[i])
+            torque_log.append([float(v)
+                               for v in applied(TH[i], DTH[i], th_d, dth_d, ddth_d, II[i])])
 
     return {
         "t": sol.t[idx].tolist(),

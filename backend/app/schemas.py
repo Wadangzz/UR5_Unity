@@ -55,6 +55,8 @@ class RunRequest(SQLModel):
     disturbance: list[float] = [0.0, 0.0, 0.0]   # 끝단 외력(base 프레임, N), 모션 후 인가
     friction: float = 0.0                        # 관절 쿨롱 마찰(N·m, plant) — 토크 제어만
     tau_max: float = 0.0                         # 액추에이터 토크 한계(N·m, 0=무제한)
+    control_rate: float = 0.0                    # 0=연속(이상) / >0=이산 ZOH 제어율(Hz)
+    noise: float = 0.0                           # 센서 측정 노이즈 std(rad) — 토크 제어만
 
 
 class RunResponse(SQLModel):

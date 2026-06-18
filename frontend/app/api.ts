@@ -110,6 +110,8 @@ export interface RunRequest {
   disturbance?: number[]; // 끝단 외력(base 프레임, N), 모션 후 인가
   friction?: number; // 관절 쿨롱 마찰(N·m, plant) — 토크 제어만
   tau_max?: number; // 액추에이터 토크 한계(N·m, 0=무제한) — 토크 제어만
+  control_rate?: number; // 0=연속(이상) / >0=이산 ZOH 제어율(Hz) — 토크 제어
+  noise?: number; // 센서 측정 노이즈 std(rad), 이산 ZOH — 토크 제어
 }
 
 export interface RunResponse {
