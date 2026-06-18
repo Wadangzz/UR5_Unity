@@ -195,7 +195,10 @@ export default function App() {
           tauMax={tauMax}
           onTauMaxChange={setTauMax}
           controlRate={controlRate}
-          onControlRateChange={setControlRate}
+          onControlRateChange={(v) => {
+            setControlRate(v);
+            if (v === 0) setNoise(0); // 연속은 노이즈 의미 없음 → 리셋
+          }}
           noise={noise}
           onNoiseChange={setNoise}
           push={push}

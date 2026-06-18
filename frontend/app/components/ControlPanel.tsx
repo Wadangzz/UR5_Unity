@@ -37,6 +37,7 @@ interface Props {
   onFrictionChange: (value: number) => void;
   tauMax: number;
   onTauMaxChange: (value: number) => void;
+
   controlRate: number;
   onControlRateChange: (value: number) => void;
   noise: number;
@@ -406,7 +407,11 @@ export default function ControlPanel({
                   센서 노이즈
                 </Label>
                 <span className='text-xs tabular-nums'>
-                  {noise === 0 ? '없음' : `${noise.toFixed(3)} rad`}
+                  {controlRate === 0
+                    ? '이산 전용'
+                    : noise === 0
+                      ? '없음'
+                      : `${noise.toFixed(3)} rad`}
                 </span>
               </div>
               <Slider
@@ -414,7 +419,7 @@ export default function ControlPanel({
                 max={0.02}
                 step={0.001}
                 value={[noise]}
-                disabled={running}
+                disabled={running || controlRate === 0}
                 onValueChange={([v]) => onNoiseChange(v)}
               />
             </div>
