@@ -17,9 +17,9 @@ def run(req: RunRequest, session: Session):
             select(Pose).where(Pose.program_id == req.program_id).order_by(Pose.id)).all()
         if not poses:
             raise HTTPException(404, f"프로그램 {req.program_id} 에 저장된 포즈가 없습니다")
-        # home 에서 출발. 티치된 관절각(theta)이 있으면 그대로(정확 재현),
-        # 없으면 Cartesian 을 IK(이식).
-        waypoints = [[0.0] * ur5.N]
+        # 현재 자세에서 출발(실제 로봇처럼 "지금 위치에서 프로그램 실행").
+        # start 미지정 시 ready 로 폴백. 티치 관절각(theta)이 있으면 그대로, 없으면 IK.
+        waypoints = [list(req.start) if req.start else ur5.READY.tolist()]
         for p in poses:
             if p.theta:
                 waypoints.append(list(p.theta))
@@ -34,7 +34,8 @@ def run(req: RunRequest, session: Session):
     result = sim.run_simulation(
         waypoints, controller=req.controller, gains=req.gains,
         gravity_comp=req.gravity_comp, t_seg=req.t_seg, hold=req.hold,
-        plant=plant, ctrl=ctrl, disturbance=req.disturbance)
+        plant=plant, ctrl=ctrl, disturbance=req.disturbance,
+        traj_mode=req.traj_mode)
 
     # 재생 중 직교좌표·manipulability 를 라이브로 보이게: θ(t) 에서 EE pose·σ_min
     # 시계열을 한 번에 계산해 응답에 실어 보낸다 (프레임당 REST 왕복 없이 인덱싱).

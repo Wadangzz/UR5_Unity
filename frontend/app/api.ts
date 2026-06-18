@@ -9,6 +9,7 @@ export interface RobotInfo {
   joint_names: string[];
   home: number[];
   home_tcp: number[];
+  ready: number[]; // 비특이 운용 출발 자세
   urdf_url: string;
   packages: Record<string, string>;
 }
@@ -97,8 +98,10 @@ export const POLE_PLACE = ['pd', 'pid', 'computed_torque'];
 export interface RunRequest {
   waypoints?: number[][]; // 관절 경유점(rad)
   program_id?: string;
+  start?: number[]; // 프로그램 실행 출발 관절각(현재 자세)
   controller?: string; // pd | pid | computed_torque
   gains?: Record<string, number>;
+  traj_mode?: string; // joint(관절 quintic) | task(직교 직선)
   gravity_comp?: boolean;
   t_seg?: number;
   hold?: number;
@@ -120,6 +123,7 @@ export interface RunResponse {
   settle_time: number | null; // 평형 도달 시각(s), 미도달 null
   steady_state_error: number | null; // 정상상태 오차(rad)
   diverged: boolean; // 발산 여부
+  traj_error: string | null; // task궤적 실패 사유(특이점/작업영역밖), 없으면 null
 }
 
 // URDF 에서 추출한 관절 메타 (슬라이더 범위용, rad)

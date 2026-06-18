@@ -14,6 +14,7 @@ JOINT_NAMES = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
 def get_robot():
     return {"name": "UR5", "n": ur5.N, "joint_names": JOINT_NAMES,
             "home": [0.0] * ur5.N, "home_tcp": ur5.M_HOME[:3, 3].tolist(),
+            "ready": ur5.READY.tolist(),    # 비특이 운용 출발 자세
             "urdf_url": urdf_url(),
             # urdf-loader packages 매핑: package://<name>/... → /meshes/<name>/...
             "packages": {PACKAGE_NAME: f"/meshes/{PACKAGE_NAME}"}}

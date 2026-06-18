@@ -43,8 +43,10 @@ class FKResponse(SQLModel):
 class RunRequest(SQLModel):
     program_id: str | None = None
     waypoints: list[list[float]] | None = None   # 관절 경유점(rad)
+    start: list[float] | None = None             # 프로그램 실행 출발 관절각(현재 자세), 없으면 ready
     controller: str = "computed_torque"          # pd | pid | computed_torque
     gains: dict[str, float] = {}
+    traj_mode: str = "joint"                      # joint(관절 quintic) | task(직교 직선)
     gravity_comp: bool = True
     t_seg: float = 1.2
     hold: float = 0.6
@@ -66,3 +68,4 @@ class RunResponse(SQLModel):
     settle_time: float | None = None         # 평형(정상상태) 도달 시각(s), 미도달 None
     steady_state_error: float | None = None  # 정상상태 오차 ‖θ-θ_d‖(rad)
     diverged: bool = False                   # 발산 여부
+    traj_error: str | None = None            # task궤적 생성 실패 사유(특이점/작업영역밖), 없으면 None

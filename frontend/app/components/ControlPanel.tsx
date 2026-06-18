@@ -17,9 +17,12 @@ interface Props {
   joints: number[];
   onChange: (index: number, value: number) => void;
   onReset: () => void;
+  onReady: () => void;
   controllers: ControllerSpec[];
   controller: string;
   onControllerChange: (value: string) => void;
+  trajMode: string;
+  onTrajModeChange: (value: string) => void;
   gains: Record<string, number>;
   onGainChange: (key: string, value: number) => void;
   autoTune: boolean;
@@ -62,9 +65,12 @@ export default function ControlPanel({
   joints,
   onChange,
   onReset,
+  onReady,
   controllers,
   controller,
   onControllerChange,
+  trajMode,
+  onTrajModeChange,
   gains,
   onGainChange,
   autoTune,
@@ -126,6 +132,24 @@ export default function ControlPanel({
                     {c.label}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 궤적 방식 — 제어기와 독립. 직교(직선)는 특이점서 실행불가가 정상 */}
+          <div className='space-y-1.5'>
+            <Label className='text-muted-foreground text-xs'>궤적 방식</Label>
+            <Select
+              value={trajMode}
+              onValueChange={onTrajModeChange}
+              disabled={running}
+            >
+              <SelectTrigger className='w-full' size='sm'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='joint'>관절공간 (곡선)</SelectItem>
+                <SelectItem value='task'>직교 직선 (task)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -292,17 +316,28 @@ export default function ControlPanel({
             onClick={onRun}
             disabled={running}
           >
-            {running ? '재생 중…' : 'Run ▶  home → 현재자세'}
+            {running ? '재생 중…' : 'Run ▶  ready → 현재자세'}
           </Button>
-          <Button
-            variant='outline'
-            size='sm'
-            className='w-full'
-            onClick={onReset}
-            disabled={running}
-          >
-            홈 자세 (0)
-          </Button>
+          <div className='flex gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              className='flex-1'
+              onClick={onReady}
+              disabled={running}
+            >
+              Ready 자세
+            </Button>
+            <Button
+              variant='outline'
+              size='sm'
+              className='flex-1'
+              onClick={onReset}
+              disabled={running}
+            >
+              홈 (0, 특이점)
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

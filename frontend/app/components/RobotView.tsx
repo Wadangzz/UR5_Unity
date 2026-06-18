@@ -39,7 +39,7 @@ function loadMesh(path: string, manager: LoadingManager, done: MeshDone) {
 
 interface Props {
   joints: number[]; // 관절각(rad), joint_names 순서
-  onLoaded: (meta: JointMeta[]) => void; // URDF 로드 완료 시 관절 메타 보고
+  onLoaded: (meta: JointMeta[], ready: number[]) => void; // 관절 메타 + ready 자세 보고
 }
 
 /**
@@ -81,7 +81,7 @@ export default function RobotView({ joints, onLoaded }: Props) {
             };
           });
           setRobot(r);
-          onLoadedRef.current(meta);
+          onLoadedRef.current(meta, info.ready);
         });
       })
       .catch((e) => setError(String(e)));

@@ -45,7 +45,11 @@ export default function Plots({ result }: { result: RunResponse | null }) {
       <CardHeader className='pb-2'>
         <div className='flex items-center justify-between'>
           <CardTitle className='text-sm'>시뮬 결과</CardTitle>
-          {result.diverged ? (
+          {result.traj_error ? (
+            <span className='text-xs font-medium text-red-600'>
+              ⚠ {result.traj_error}
+            </span>
+          ) : result.diverged ? (
             <span className='text-xs font-medium text-red-600'>⚠ 발산</span>
           ) : result.settle_time != null ? (
             <span className='text-muted-foreground text-xs tabular-nums'>

@@ -70,6 +70,10 @@ GRAVITY = np.array([0.0, 0.0, -9.81])
 # 관절 개수
 N = 6
 
+# 비특이 운용 ready 자세 (kinematic zero=전관절0 은 특이점이므로 데모 출발점용).
+# [0, -90°, 90°, -90°, -90°, 0] = 팔꿈치 굽힌 표준 UR ready 포즈 (σ_min≈0.22).
+READY = np.array([0.0, -np.pi / 2, np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0])
+
 
 def home_config():
     """모든 관절각=0 일 때 말단(end-effector) 변환행렬 M07 = ∏ Mlist."""

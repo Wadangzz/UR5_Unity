@@ -23,8 +23,10 @@ import {
 export default function App() {
   const [meta, setMeta] = useState<JointMeta[]>([]);
   const [joints, setJoints] = useState<number[]>([]);
+  const [ready, setReady] = useState<number[]>([]); // 비특이 운용 출발 자세
   const controllers = CONTROLLERS;
   const [controller, setController] = useState('computed_torque');
+  const [trajMode, setTrajMode] = useState('joint'); // joint | task(직교 직선)
   const [gains, setGains] = useState<Record<string, number>>({});
   const [autoTune, setAutoTune] = useState(false);
   const [targetTs, setTargetTs] = useState(0.6); // 목표 정착시간(s)
@@ -79,10 +81,12 @@ export default function App() {
     [],
   );
 
-  // URDF 로드 완료 → 관절 메타 저장 + 관절각 0 으로 초기화
-  const handleLoaded = useCallback((m: JointMeta[]) => {
+  // URDF 로드 완료 → 관절 메타 저장 + 비특이 ready 자세로 초기화
+  // (kinematic zero=전관절0 은 특이점이라 시작 자세로 부적절)
+  const handleLoaded = useCallback((m: JointMeta[], r: number[]) => {
     setMeta(m);
-    setJoints(m.map(() => 0));
+    setReady(r);
+    setJoints(r);
   }, []);
 
   const setJoint = (index: number, value: number) =>
@@ -93,6 +97,10 @@ export default function App() {
   // 프레임마다 EE pose·σ_min 도 같이 갱신 → 직교좌표/manipulability 라이브 표시
   const play = (res: RunResponse) => {
     const { theta, t, ee_pose, sigma_min } = res;
+    if (theta.length === 0) {
+      setRunning(false); // 궤적 생성 실패 등 재생할 프레임 없음
+      return;
+    }
     const showFrame = (i: number) => {
       setJoints(theta[i]);
       if (ee_pose[i]) setLive({ pose: ee_pose[i], sigma: sigma_min[i] });
@@ -122,6 +130,7 @@ export default function App() {
       const res = await runSimulation({
         controller,
         gains,
+        traj_mode: trajMode,
         payload,
         model_scale: modelScale,
         disturbance: push,
@@ -134,10 +143,11 @@ export default function App() {
       setRunning(false);
     }
   };
-  // 현재 슬라이더 자세를 목표로 home→목표
-  const run = () => runReq({ waypoints: [meta.map(() => 0), [...joints]] });
-  // 티치 프로그램 순회 (위 제어기 세팅 그대로 적용)
-  const runProgram = (programId: string) => runReq({ program_id: programId });
+  // 현재 슬라이더 자세를 목표로 ready(비특이)→목표
+  const run = () => runReq({ waypoints: [ready, [...joints]] });
+  // 티치 프로그램 순회 (현재 자세에서 출발 — 위 제어기 세팅 그대로 적용)
+  const runProgram = (programId: string) =>
+    runReq({ program_id: programId, start: [...joints] });
 
   return (
     <div className='bg-background relative h-screen w-screen'>
@@ -156,9 +166,12 @@ export default function App() {
           joints={joints}
           onChange={setJoint}
           onReset={reset}
+          onReady={() => setJoints(ready)}
           controllers={controllers}
           controller={controller}
           onControllerChange={setController}
+          trajMode={trajMode}
+          onTrajModeChange={setTrajMode}
           gains={gains}
           onGainChange={setGain}
           autoTune={autoTune}

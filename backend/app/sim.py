@@ -11,7 +11,7 @@ robot_math.Dynamics 는 Mlist/Glist/Slist 를 인자로 받으므로, 현재는 
 """
 import numpy as np
 from scipy.integrate import solve_ivp
-from app.core.robot_math import Dynamics, SE3, quintic_time_scaling
+from app.core.robot_math import Dynamics, SE3, SO3, quintic_time_scaling
 from app.core import ur5_model as ur5
 
 N = ur5.N
@@ -29,20 +29,33 @@ VELOCITY_CONTROLLERS = ("joint_velocity", "resolved_rate")
 
 def run_simulation(waypoints, controller="computed_torque", gains=None,
                    gravity_comp=True, t_seg=1.2, hold=0.6, hz=30,
-                   plant=None, ctrl=None, disturbance=None):
+                   plant=None, ctrl=None, disturbance=None, traj_mode="joint"):
     """관절 경유점(rad)을 제어기로 순회. → {t, theta, tcp, error, torque, qdot, ...}.
 
-    controller 가 속도제어(joint_velocity/resolved_rate)면 기구학 plant 로,
-    그 외(pd/pid/computed_torque/impedance)면 동역학 plant 로 분기한다.
-    plant/ctrl/disturbance 는 동역학 plant 에서만 의미가 있다(속도제어는 무시).
+    궤적생성(traj_mode)과 제어기는 직교(독립):
+    - traj_mode='joint': 관절공간 quintic 보간(현행). 말단 경로는 곡선.
+    - traj_mode='task' : 직교 SE(3) 직선보간 → IK 샘플 → θ_d. 말단 직선이지만
+      특이점/작업영역밖에서 IK 실패·관절속도 폭발 시 그 지점까지 자르고 traj_error 보고.
+    제어기는 모두 θ_d(t) 를 받으므로 어느 궤적이든 동일하게 추종한다.
+
+    controller 가 속도제어/어드미턴스면 기구학 plant, 그 외는 동역학 plant 로 분기.
+    plant/ctrl/disturbance 는 동역학 plant·어드미턴스에서만 의미가 있다.
     """
     gains = gains or {}
+    WP = _prep_waypoints(waypoints)
+    ref, T, traj_error = _build_ref(WP, t_seg, hold, traj_mode)
+    if T <= 0:                                  # 궤적 생성 자체 실패(첫 점부터 불가)
+        return _empty_result(WP, traj_error)
+
     if controller == "admittance":
-        return _run_admittance(waypoints, gains, t_seg, hold, hz, disturbance)
-    if controller in VELOCITY_CONTROLLERS:
-        return _run_velocity(waypoints, controller, gains, t_seg, hold, hz)
-    return _run_torque(waypoints, controller, gains, gravity_comp, t_seg, hold,
-                       hz, plant, ctrl, disturbance)
+        result = _run_admittance(WP, ref, T, gains, hz, disturbance)
+    elif controller in VELOCITY_CONTROLLERS:
+        result = _run_velocity(WP, ref, T, controller, gains, hz)
+    else:
+        result = _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
+                             plant, ctrl, disturbance)
+    result["traj_error"] = traj_error
+    return result
 
 
 # ----------------------------------------------------------------------
@@ -72,6 +85,82 @@ def _make_ref(WP, t_seg, hold):
         return q1.copy(), np.zeros(N), np.zeros(N)
 
     return ref, T
+
+
+def _se3_straight(X0, X1, s):
+    """직교 직선 보간: 위치 선형 + 회전 측지선(SLERP 등가). s∈[0,1]."""
+    Td = np.eye(4)
+    Td[:3, 3] = (1 - s) * X0[:3, 3] + s * X1[:3, 3]
+    Rrel = SO3.log(X0[:3, :3].T @ X1[:3, :3])   # 상대회전(회전벡터)
+    Td[:3, :3] = X0[:3, :3] @ SO3.exp(s * Rrel)
+    return Td
+
+
+def _build_ref(WP, t_seg, hold, traj_mode):
+    """궤적 생성 → (ref(t)→(θ_d,θ̇_d,θ̈_d), T, traj_error).
+
+    joint: 관절 quintic(해석적, 항상 실행가능).
+    task : 직교 SE(3) 직선보간 → IK 샘플(precompute) → θ_d 격자 보간.
+           IK 비수렴(작업영역밖) 또는 관절속도 폭발(특이점) 시 그 지점까지 자르고
+           traj_error 를 채운다(='실행 불가'를 정직하게 표면화).
+    """
+    if traj_mode != "task":
+        ref, T = _make_ref(WP, t_seg, hold)
+        return ref, T, None
+
+    n_seg = len(WP) - 1
+    seg = t_seg + hold
+    T = n_seg * seg
+    poses = [ur5.fk(w) for w in WP]             # 웨이포인트 SE(3)
+    ts = np.linspace(0, T, int(T * 200) + 1)    # 조밀 격자(200 Hz)
+    TH = np.zeros((len(ts), N))
+    seed = WP[0].copy()
+    traj_error = None
+    n_ok = len(ts)
+    for i, t in enumerate(ts):
+        k = min(int(t // seg), n_seg - 1)
+        loc = t - k * seg
+        s = quintic_time_scaling(loc, t_seg)[0] if loc < t_seg else 1.0
+        Xd = _se3_straight(poses[k], poses[k + 1], s)
+        th, ok = ur5.ik(Xd, seed)
+        if not ok:
+            traj_error = f"직교 직선이 작업영역/특이점에 막힘 (t≈{t:.2f}s) — 실행 불가"
+            n_ok = i
+            break
+        TH[i], seed = th, th
+    ts, TH = ts[:n_ok], TH[:n_ok]
+    if len(ts) < 2:
+        return (lambda _t: (WP[0].copy(), np.zeros(N), np.zeros(N))), 0.0, traj_error
+
+    dt = ts[1] - ts[0]
+    DTH = np.gradient(TH, dt, axis=0)
+    # 특이점 부근 관절속도 폭발 감지 → 그 지점까지 절단
+    over = np.where(np.max(np.abs(DTH), axis=1) > OMEGA_MAX)[0]
+    if traj_error is None and len(over):
+        cut = max(over[0], 2)
+        traj_error = f"특이점 부근 관절속도 폭발 (t≈{ts[cut - 1]:.2f}s) — 실행 불가"
+        ts, TH, DTH = ts[:cut], TH[:cut], DTH[:cut]
+    DDTH = np.gradient(DTH, dt, axis=0)
+    T_eff = float(ts[-1])
+
+    def ref(t):
+        tc = min(max(t, 0.0), T_eff)
+        thd = np.array([np.interp(tc, ts, TH[:, j]) for j in range(N)])
+        dthd = np.array([np.interp(tc, ts, DTH[:, j]) for j in range(N)])
+        ddthd = np.array([np.interp(tc, ts, DDTH[:, j]) for j in range(N)])
+        return thd, dthd, ddthd
+
+    return ref, T_eff, traj_error
+
+
+def _empty_result(WP, traj_error):
+    """궤적 생성 실패 시 빈 결과(재생할 것 없음 + 사유)."""
+    return {
+        "t": [], "theta": [], "tcp": [], "error": [], "torque": [], "qdot": [],
+        "waypoints_tcp": [ur5.fk(w)[:3, 3].tolist() for w in WP],
+        "settle_time": None, "steady_state_error": None,
+        "diverged": True, "traj_error": traj_error,
+    }
 
 
 def _blowup_event():
@@ -125,7 +214,7 @@ def _keep_idx(sol, settle_time, diverged, T):
 # ----------------------------------------------------------------------
 #  동역학 plant — 토크 입력 (PD / PID / Computed Torque / 임피던스)
 # ----------------------------------------------------------------------
-def _run_torque(waypoints, controller, gains, gravity_comp, t_seg, hold, hz,
+def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
                 plant, ctrl, disturbance):
     Kp = float(gains.get("kp", 100.0))
     Kd = float(gains.get("kd", 20.0))
@@ -136,8 +225,6 @@ def _run_torque(waypoints, controller, gains, gravity_comp, t_seg, hold, hz,
     def g_ctrl(th):
         return Dynamics.gravity_forces(th, ur5.GRAVITY, *ctrl)
 
-    WP = _prep_waypoints(waypoints)
-    ref, T = _make_ref(WP, t_seg, hold)
     use_I = controller in ("pid", "computed_torque")
 
     def torque(th, dth, th_d, dth_d, ddth_d, I):
@@ -227,7 +314,7 @@ def _run_torque(waypoints, controller, gains, gravity_comp, t_seg, hold, hz,
 # ----------------------------------------------------------------------
 #  기구학 plant — 속도 입력 (resolved-rate, MR §11.3)
 # ----------------------------------------------------------------------
-def _run_velocity(waypoints, controller, gains, t_seg, hold, hz):
+def _run_velocity(WP, ref, T, controller, gains, hz):
     """속도제어: θ̇=제어출력, θ만 적분(1차계). 동역학·중력 불필요 → RK45.
 
     joint_velocity (§11.3.2): θ̇ = θ̇_d + Kp(θ_d−θ) + Ki∫(θ_d−θ)
@@ -240,9 +327,6 @@ def _run_velocity(waypoints, controller, gains, t_seg, hold, hz):
     use_I = Ki != 0.0
     is_rr = controller == "resolved_rate"
     idim = 6 if is_rr else N             # 적분항 차원 (UR5 는 둘 다 6)
-
-    WP = _prep_waypoints(waypoints)
-    ref, T = _make_ref(WP, t_seg, hold)
 
     def law(th, th_d, dth_d, I):
         """제어출력 θ̇ 와 적분항 integrand 반환."""
@@ -312,7 +396,7 @@ def _run_velocity(waypoints, controller, gains, t_seg, hold, hz):
 # ----------------------------------------------------------------------
 #  어드미턴스 (MR §11.7.2) — 외력을 '센싱'해 움직임 생성 (임피던스의 쌍)
 # ----------------------------------------------------------------------
-def _run_admittance(waypoints, gains, t_seg, hold, hz, disturbance):
+def _run_admittance(WP, ref, T, gains, hz, disturbance):
     """어드미턴스: 가상 질량-스프링-댐퍼를 시뮬레이션해 외력→움직임을 만든다.
 
     M·Δẍ + B·Δẋ + K·Δp = f_ext  (base 프레임 3D 병진, MR 식 11.66).
@@ -327,8 +411,6 @@ def _run_admittance(waypoints, gains, t_seg, hold, hz, disturbance):
     KP_TRACK = 20.0                            # 내부 모션 추종(resolved-rate) 게인
     # ↑ 가상 동역학(ωn=√(K/M))보다 빨라야 M-B-K 응답(오버슛 등)이 가려지지 않음
 
-    WP = _prep_waypoints(waypoints)
-    ref, T = _make_ref(WP, t_seg, hold)
     dist = np.asarray(disturbance, dtype=float) if disturbance else None
     has_dist = dist is not None and np.any(dist)
 
