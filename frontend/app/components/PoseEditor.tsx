@@ -90,7 +90,7 @@ const fromPose7 = (pose: number[]): Pose6 => {
 export default function PoseEditor({ joints, onSolved, running }: Props) {
   const [pose, setPose] = useState<Pose6 | null>(null);
   const [status, setStatus] = useState('');
-  const [sigma, setSigma] = useState<number | null>(null); // σ_min (특이점 근접)
+  const [sigma, setSigma] = useState<number | null>(null); // σ_min 
 
   const latest = useRef<number[] | null>(null); // 마지막 IK 목표 pose7
   const inFlight = useRef(false);
@@ -187,7 +187,7 @@ export default function PoseEditor({ joints, onSolved, running }: Props) {
         {sigma !== null && (
           <div className='bg-muted flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs'>
             <span className='text-muted-foreground tabular-nums'>
-              조작성 σ_min={sigma.toFixed(3)}
+              Manipulability σ_min={sigma.toFixed(3)}
             </span>
             <span
               className={`font-medium ${sigma < 0.03 ? 'text-red-600' : 'text-emerald-600'}`}
