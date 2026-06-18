@@ -186,13 +186,34 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 - `3a7109c` feat: task-space 궤적(직교 직선) + 비특이 ready 자세 + 프로그램 현재자세 출발
 - `d643e4f` feat: 현실 모델 — 관절 마찰 + 토크 포화 (토크 plant)
 
+### 🚀 numba 고속화 + 이산 ZOH (branch `numba-dynamics`, develop 미머지)
+
+센서노이즈 보류의 근본원인(순수 NumPy RNE ~3.5ms/호출)을 해결하러 시작 → 큰 가속 + 이산 제어로 확장.
+
+- **numba JIT 동역학** (`app/core/dynamics_fast.py`): RNE 전체를 `@njit(cache=True)` 로
+  재작성(스택 배열 입력, SE3 헬퍼 hat/exp6/adjoint/ad 포함). robot_math.Dynamics 와
+  **비트일치**(max|diff|=0). fd 3.5ms→254µs(**~14x**), 연속 시뮬 2-3.5s→**~0.3s(~7x)**.
+  `sim._run_torque` 가 `df.*` 로 호출(스택 1회 변환). `sim.warmup()`+부팅 호출로 첫 요청 컴파일 지연 흡수.
+- **하이브리드 제어 모드** (`control_rate`): 0=연속 Radau(이상·빠름·기본) / >0=이산 ZOH 루프
+  (rate Hz 샘플·토크 ZOH 유지, plant RK4). 실제 디지털 제어 — **제어율 낮추면 불안정 재현**.
+  · 실측: PD 1kHz 안정/500Hz 발산, hot 게인(PID·임피던스)은 2kHz 필요. 자동튜닝 ts=0.2(Kp=400)→2kHz 필요.
+- **센서 노이즈**: 샘플 순간 주입(이산 전용, 연속은 비활성). 토크 chatter→D항 증폭. noise>0 자동 이산화.
+- `_detect_settle` 발산판정에 절대임계 추가(이산 미세 task오차 오판 수정). `DEMOS.md`(튜닝 레시피+안정성표) 추가.
+- **개념(대화 3):** Python이 아니라 *JIT 안 된 NumPy 호출 오버헤드*가 병목(MATLAB도 동일, GPU는 단일로봇
+  직렬 RNE 부적합—수천 env 병렬 RL용)·연속(제어율∞ 이상화) vs 이산 ZOH(실제 디지털, sim-to-real)·
+  빠른 정착=높은 게인=높은 제어율 필요(절벽).
+- **현 상태**: 힘제어는 제어측(Jᵀ·Ftip·빠른동역학) 준비됨, **접촉/환경 모델만 선행하면** 가능.
+  멀티로봇은 **동역학 엔진이 이미 generic**(Mlist/Glist/Slist 인자, numba n-무관) → URDF 로더+메시+셀렉터만.
+
+브랜치 커밋: `b7fd734`(numba) · `08eb1fe`(이산 ZOH+노이즈) · `e0ae557`(노이즈 비활성 UX) · `90cc359`(DEMOS) · 외 DEVLOG
+
 ---
 
 ## 📋 다음 할 것 (TODO)
 
-- [ ] **멀티로봇** — (b) 백엔드 큐레이션(robot_descriptions ur5/ur10/panda/iiwa) + 프론트 선택,
-      `mr_urdf_loader` 로 `{Mlist,Glist,Slist}` 추출(sim 이미 인자로 소비), 메시 서빙 일반화.
-      → 그 뒤 (a) **URDF 업로드**(메시 동반 필요)
+- [ ] **멀티로봇** — ⭐엔진 이미 generic(동역학 Mlist/Glist/Slist 인자, numba n-무관) → 알고리즘 0.
+      (b) `mr_urdf_loader` 로 `{Mlist,Glist,Slist}` 추출 + 메시 서빙 일반화 + 프론트 로봇 선택,
+      → 그 뒤 (a) **URDF 업로드**. (7-DOF 붙으면 널공간 제어도 열림)
 - [x] **속도제어**(관절 θ̇_d / 직교 resolved-rate `J†`) ✅ 2026-06-18
       └ **순수 토크 입력 모드**(§11.4)는 τ 입력 스키마 필요 → 보류
 - [x] **어드미턴스**(§11.7.2) ✅ 2026-06-18
@@ -203,7 +224,8 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
       numpy 와 비트일치, fd 3.5ms→254µs(~14x), 시뮬 2-3.5s→~0.3s(~7x). 부팅 warmup.
 - [x] **이산 ZOH 제어 + 센서노이즈** ✅ (branch) — `control_rate`(0=연속/>0=이산), 하이브리드.
       제어율 낮추면 불안정 재현, 노이즈 chatter. numba 덕에 1kHz ~4s 현실화.
-- [ ] **힘제어**(hybrid position/force §11.6) — 렌치 `τ=Jᵀ·F` + 접촉/환경 모델 선행 필요
+- [ ] **힘제어**(hybrid position/force §11.6) — 제어측(렌치 `τ=Jᵀ·F`·Ftip 배선·빠른동역학) 준비됨.
+      **접촉/환경 모델**(가상 표면→Ftip)만 지으면 가능 + 하이브리드 투영 P(식 11.61)
 - [ ] **`numba-dynamics` 브랜치 → develop 머지** (검증 끝나면)
 - [ ] (선택) fd 추가 최적화: 해석적 SE(3) 역행렬 → 이산 더 빠르게(2kHz 기본 가능)
 - [ ] **redundancy/널공간** 제어(7-DOF, `(I−J†J)θ̇₀`) — 멀티로봇 후
