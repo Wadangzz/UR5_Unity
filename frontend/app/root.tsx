@@ -35,6 +35,10 @@ export default function App() {
     setPush((prev) => prev.map((p, i) => (i === index ? value : p)));
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResponse | null>(null);
+  // 재생 중 현재 프레임의 EE pose·σ_min (직교좌표/manipulability 라이브 표시용)
+  const [live, setLive] = useState<{ pose: number[]; sigma: number } | null>(
+    null,
+  );
   const rafRef = useRef<number | null>(null);
 
   // 게인 결정: 자동(극배치)이면 목표 정착시간에서 계산, 수동이면 제어기 기본값.
@@ -86,18 +90,24 @@ export default function App() {
   const reset = () => setJoints(meta.map(() => 0));
 
   // θ(t) 를 실시간으로 재생 (requestAnimationFrame, t[] 타이밍대로)
-  const play = (theta: number[][], t: number[]) => {
+  // 프레임마다 EE pose·σ_min 도 같이 갱신 → 직교좌표/manipulability 라이브 표시
+  const play = (res: RunResponse) => {
+    const { theta, t, ee_pose, sigma_min } = res;
+    const showFrame = (i: number) => {
+      setJoints(theta[i]);
+      if (ee_pose[i]) setLive({ pose: ee_pose[i], sigma: sigma_min[i] });
+    };
     const dur = t[t.length - 1] || 0;
     const start = performance.now();
     const tick = (now: number) => {
       const el = (now - start) / 1000;
       let i = 0;
       while (i < t.length - 1 && t[i + 1] <= el) i++;
-      setJoints(theta[i]);
+      showFrame(i);
       if (el < dur) {
         rafRef.current = requestAnimationFrame(tick);
       } else {
-        setJoints(theta[theta.length - 1]);
+        showFrame(theta.length - 1);
         setRunning(false);
       }
     };
@@ -118,7 +128,7 @@ export default function App() {
         ...req,
       });
       setResult(res);
-      play(res.theta, res.t);
+      play(res);
     } catch (e) {
       console.error(e);
       setRunning(false);
@@ -167,7 +177,12 @@ export default function App() {
       </div>
 
       <div className='absolute top-20 left-4 z-10 space-y-3'>
-        <PoseEditor joints={joints} onSolved={setJoints} running={running} />
+        <PoseEditor
+          joints={joints}
+          onSolved={setJoints}
+          running={running}
+          live={live}
+        />
         <ProgramList
           joints={joints}
           onRunProgram={runProgram}

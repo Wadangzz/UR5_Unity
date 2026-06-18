@@ -114,6 +114,8 @@ export interface RunResponse {
   error: number[];
   torque: number[][]; // [frame][6] 토크제어 출력(N·m). 속도제어 시 빈 배열
   qdot: number[][]; // [frame][6] 속도제어 출력 commanded 관절속도(rad/s)
+  ee_pose: number[][]; // [frame][7] EE pose [x,y,z,qx,qy,qz,qw] (재생 중 직교좌표)
+  sigma_min: number[]; // [frame] 최소특이값 (재생 중 manipulability)
   waypoints_tcp: number[][];
   settle_time: number | null; // 평형 도달 시각(s), 미도달 null
   steady_state_error: number | null; // 정상상태 오차(rad)

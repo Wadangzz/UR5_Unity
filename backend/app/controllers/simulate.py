@@ -31,7 +31,19 @@ def run(req: RunRequest, session: Session):
         raise HTTPException(400, "program_id 또는 waypoints 중 하나는 필요합니다")
 
     plant, ctrl = realism.build_models(req.payload, req.model_scale)
-    return sim.run_simulation(
+    result = sim.run_simulation(
         waypoints, controller=req.controller, gains=req.gains,
         gravity_comp=req.gravity_comp, t_seg=req.t_seg, hold=req.hold,
         plant=plant, ctrl=ctrl, disturbance=req.disturbance)
+
+    # 재생 중 직교좌표·manipulability 를 라이브로 보이게: θ(t) 에서 EE pose·σ_min
+    # 시계열을 한 번에 계산해 응답에 실어 보낸다 (프레임당 REST 왕복 없이 인덱싱).
+    ee_pose, sigma_min = [], []
+    for th in result["theta"]:
+        T = ur5.fk(np.array(th))
+        quat, _ = SE3.orientation(T)                 # [x,y,z,w]
+        ee_pose.append(T[:3, 3].tolist() + quat)
+        sigma_min.append(ur5.manipulability(th)["sigma_min"])
+    result["ee_pose"] = ee_pose
+    result["sigma_min"] = sigma_min
+    return result

@@ -8,6 +8,7 @@ interface Props {
   joints: number[];
   onSolved: (theta: number[]) => void;
   running: boolean;
+  live?: { pose: number[]; sigma: number } | null; // 재생 중 현재 프레임 EE pose·σ_min
 }
 
 interface Pose6 {
@@ -87,10 +88,10 @@ const fromPose7 = (pose: number[]): Pose6 => {
  * IK 를 effect 가 아니라 편집에서만 트리거 → running 변화로 stale 타깃이
  * 재적용되는 버그 없음. FK 동기화는 재생 중·IK 중·방금 편집(400ms) 중이면 건너뜀.
  */
-export default function PoseEditor({ joints, onSolved, running }: Props) {
+export default function PoseEditor({ joints, onSolved, running, live }: Props) {
   const [pose, setPose] = useState<Pose6 | null>(null);
   const [status, setStatus] = useState('');
-  const [sigma, setSigma] = useState<number | null>(null); // σ_min 
+  const [sigma, setSigma] = useState<number | null>(null); // σ_min
 
   const latest = useRef<number[] | null>(null); // 마지막 IK 목표 pose7
   const inFlight = useRef(false);
@@ -157,7 +158,11 @@ export default function PoseEditor({ joints, onSolved, running }: Props) {
     pump.current();
   };
 
-  if (!pose) return null;
+  // 재생 중엔 응답 시계열의 현재 프레임 값을, 평소엔 jog FK 결과를 표시
+  const dispPose = running && live ? fromPose7(live.pose) : pose;
+  const dispSigma = running && live ? live.sigma : sigma;
+
+  if (!dispPose) return null;
 
   return (
     <Card className='bg-card/95 supports-[backdrop-filter]:bg-card/80 w-60 backdrop-blur'>
@@ -173,7 +178,7 @@ export default function PoseEditor({ joints, onSolved, running }: Props) {
             <Input
               type='number'
               step={f.step}
-              value={Number(pose[f.k].toFixed(3))}
+              value={Number(dispPose[f.k].toFixed(3))}
               disabled={running}
               onChange={(e) => setField(f.k, parseFloat(e.target.value) || 0)}
               className='h-8'
@@ -184,15 +189,15 @@ export default function PoseEditor({ joints, onSolved, running }: Props) {
         {status && (
           <p className='text-muted-foreground text-center text-xs'>{status}</p>
         )}
-        {sigma !== null && (
+        {dispSigma !== null && (
           <div className='bg-muted flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs'>
             <span className='text-muted-foreground tabular-nums'>
-              Manipulability σ_min={sigma.toFixed(3)}
+              Manipulability σ_min={dispSigma.toFixed(3)}
             </span>
             <span
-              className={`font-medium ${sigma < 0.03 ? 'text-red-600' : 'text-emerald-600'}`}
+              className={`font-medium ${dispSigma < 0.03 ? 'text-red-600' : 'text-emerald-600'}`}
             >
-              {sigma < 0.03 ? '⚠ 특이점 근접' : '정상'}
+              {dispSigma < 0.03 ? '⚠ 특이점 근접' : '정상'}
             </span>
           </div>
         )}
