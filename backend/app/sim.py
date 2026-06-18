@@ -11,7 +11,8 @@ robot_math.Dynamics 는 Mlist/Glist/Slist 를 인자로 받으므로, 현재는 
 """
 import numpy as np
 from scipy.integrate import solve_ivp
-from app.core.robot_math import Dynamics, SE3, SO3, quintic_time_scaling
+from app.core.robot_math import SE3, SO3, quintic_time_scaling
+from app.core import dynamics_fast as df       # numba JIT RNE (numpy 대비 ~14x)
 from app.core import ur5_model as ur5
 
 N = ur5.N
@@ -25,6 +26,18 @@ THETA_MAX = 3 * np.pi   # 발산 안전망: 위치(rad), 오버슛보다 큼
 OMEGA_MAX = 20.0        # 발산 안전망: 속도(rad/s), 정상 ~2 보다 큼
 
 VELOCITY_CONTROLLERS = ("joint_velocity", "resolved_rate")
+
+
+def warmup():
+    """numba RNE 를 미리 JIT 컴파일(서버 부팅 시 1회). fresh 환경 첫 /api/run 의
+    ~14s 컴파일 지연을 부팅으로 옮긴다(이후 디스크 캐시로 ~0.5s)."""
+    Mp, Gp, Sp = df.stack_model(*MODEL)
+    th = ur5.READY.astype(float)
+    z, g, z6 = np.zeros(N), ur5.GRAVITY, np.zeros(6)
+    df.forward_dynamics(th, z, z, g, z6, Mp, Gp, Sp)
+    df.mass_matrix(th, Mp, Gp, Sp)
+    df.gravity_forces(th, g, Mp, Gp, Sp)
+    df.coriolis_forces(th, z, Mp, Gp, Sp)
 
 
 def run_simulation(waypoints, controller="computed_torque", gains=None,
@@ -222,9 +235,12 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
     Ki = float(gains.get("ki", 0.0))
     plant = plant or MODEL
     ctrl = ctrl or MODEL
+    # 모델을 numba 친화적 스택 배열로 1회 변환 (rhs 안에서 매번 변환하지 않도록)
+    Mp, Gp, Sp = df.stack_model(*plant)
+    Mc, Gc, Sc = df.stack_model(*ctrl)
 
     def g_ctrl(th):
-        return Dynamics.gravity_forces(th, ur5.GRAVITY, *ctrl)
+        return df.gravity_forces(th, ur5.GRAVITY, Mc, Gc, Sc)
 
     use_I = controller in ("pid", "computed_torque")
 
@@ -232,8 +248,8 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
         e, ed = th_d - th, dth_d - dth
         if controller == "computed_torque":
             aq = ddth_d + Kd * ed + Kp * e + Ki * I
-            M = Dynamics.mass_matrix(th, *ctrl)
-            c = Dynamics.coriolis_forces(th, dth, *ctrl)
+            M = df.mass_matrix(th, Mc, Gc, Sc)
+            c = df.coriolis_forces(th, dth, Mc, Gc, Sc)
             return M @ aq + c + g_ctrl(th)
         if controller == "pid":
             tau = Kp * e + Ki * I + Kd * ed
@@ -271,7 +287,7 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
         tau = applied(th, dth, th_d, dth_d, ddth_d, I)
         if friction > 0:        # 쿨롱 마찰(plant 반력, 운동 반대·tanh 평활로 chatter 방지)
             tau = tau - friction * np.tanh(dth / 0.02)
-        ddth = Dynamics.forward_dynamics(th, dth, tau, ur5.GRAVITY, Ftip(t, th), *plant)
+        ddth = df.forward_dynamics(th, dth, tau, ur5.GRAVITY, Ftip(t, th), Mp, Gp, Sp)
         parts = [dth, ddth] + ([th_d - th] if use_I else [])
         return np.concatenate(parts)
 
