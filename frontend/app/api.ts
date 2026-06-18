@@ -79,6 +79,16 @@ export const CONTROLLERS: ControllerSpec[] = [
       { key: 'ki', default: 0, min: 0, max: 5 },
     ],
   },
+  // 어드미턴스(MR §11.7.2): 외력→움직임. 가상 M-B-K, 외란을 f_ext 로 사용.
+  {
+    name: 'admittance',
+    label: '어드미턴스',
+    params: [
+      { key: 'm', default: 2, min: 1, max: 10, label: 'M (가상질량, kg)' },
+      { key: 'b', default: 40, min: 0, max: 200, label: 'B (감쇠, N·s/m)' },
+      { key: 'k', default: 600, min: 0, max: 3000, label: 'K (강성, N/m)' },
+    ],
+  },
 ];
 
 // 극배치(2차계) 자동튜닝이 의미있는 제어기. 속도제어(1차계)·임피던스(직교강성)는 제외.

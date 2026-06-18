@@ -37,6 +37,8 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
     plant/ctrl/disturbance 는 동역학 plant 에서만 의미가 있다(속도제어는 무시).
     """
     gains = gains or {}
+    if controller == "admittance":
+        return _run_admittance(waypoints, gains, t_seg, hold, hz, disturbance)
     if controller in VELOCITY_CONTROLLERS:
         return _run_velocity(waypoints, controller, gains, t_seg, hold, hz)
     return _run_torque(waypoints, controller, gains, gravity_comp, t_seg, hold,
@@ -291,6 +293,101 @@ def _run_velocity(waypoints, controller, gains, t_seg, hold, hz):
     vmax = np.max(np.abs(QD), axis=1) if len(QD) else np.zeros(0)
 
     diverged, settle_time, steady_state_error = _detect_settle(sol, T, err, vmax, hz)
+    idx = _keep_idx(sol, settle_time, diverged, T)
+
+    return {
+        "t": sol.t[idx].tolist(),
+        "theta": TH[idx].tolist(),
+        "tcp": [ur5.fk(TH[i])[:3, 3].tolist() for i in idx],
+        "error": [err[i] for i in idx],
+        "torque": [],
+        "qdot": QD[idx].tolist(),
+        "waypoints_tcp": [ur5.fk(w)[:3, 3].tolist() for w in WP],
+        "settle_time": settle_time,
+        "steady_state_error": steady_state_error,
+        "diverged": bool(diverged),
+    }
+
+
+# ----------------------------------------------------------------------
+#  어드미턴스 (MR §11.7.2) — 외력을 '센싱'해 움직임 생성 (임피던스의 쌍)
+# ----------------------------------------------------------------------
+def _run_admittance(waypoints, gains, t_seg, hold, hz, disturbance):
+    """어드미턴스: 가상 질량-스프링-댐퍼를 시뮬레이션해 외력→움직임을 만든다.
+
+    M·Δẍ + B·Δẋ + K·Δp = f_ext  (base 프레임 3D 병진, MR 식 11.66).
+    그 가상 변위 Δp 를 nominal setpoint 에 더한 목표 pose 를 resolved-rate 로 추종
+    (모션 plant — 임피던스가 토크 plant 인 것과 대칭: 어드미턴스 로봇=모션제어).
+    외란을 인가하면 로봇이 그 힘에 능동적으로 양보하며 움직인다(정상상태 Δp=f/K).
+    힘센서 없는 시뮬에선 외란(이미 아는 값)을 f_ext 로 재사용. M>0 라 2차 응답(오버슛).
+    """
+    M = max(float(gains.get("m", 2.0)), 0.1)    # 가상 질량 kg (0 방지)
+    B = float(gains.get("b", 40.0))             # 가상 감쇠 N·s/m
+    K = float(gains.get("k", 600.0))            # 가상 강성 N/m
+    KP_TRACK = 20.0                            # 내부 모션 추종(resolved-rate) 게인
+    # ↑ 가상 동역학(ωn=√(K/M))보다 빨라야 M-B-K 응답(오버슛 등)이 가려지지 않음
+
+    WP = _prep_waypoints(waypoints)
+    ref, T = _make_ref(WP, t_seg, hold)
+    dist = np.asarray(disturbance, dtype=float) if disturbance else None
+    has_dist = dist is not None and np.any(dist)
+
+    def f_ext(t):                               # 외란 = 센싱된 외력 (모션 종료 후 인가)
+        return dist if (has_dist and t >= T) else np.zeros(3)
+
+    def rhs(t, x):
+        th, dp, dv = x[:N], x[N:N + 3], x[N + 3:N + 6]
+        T_set = ur5.fk(ref(t)[0])                      # nominal setpoint pose
+        da = (f_ext(t) - B * dv - K * dp) / M          # 가상 어드미턴스 동역학
+        T_d = T_set.copy()
+        T_d[:3, 3] = T_set[:3, 3] + dp                 # 목표 = setpoint + 가상 변위
+        Xe = SE3.log(np.linalg.inv(ur5.fk(th)) @ T_d)[0]
+        qd = ur5.dls_inv(ur5.jacobian_body(th)) @ (KP_TRACK * Xe)
+        return np.concatenate([qd, dv, da])
+
+    x0 = np.concatenate([WP[0], np.zeros(6)])
+    T_cap = T + SETTLE_MAX
+    t_eval = np.linspace(0, T_cap, int(T_cap * hz) + 1)
+
+    def blowup(t, x):
+        return THETA_MAX - float(np.max(np.abs(x[:N])))
+    blowup.terminal = True
+    blowup.direction = -1
+    sol = solve_ivp(rhs, (0, T_cap), x0, t_eval=t_eval, method="RK45",
+                    rtol=1e-5, atol=1e-8, events=blowup)
+
+    TH = sol.y[:N].T
+    QD, err = [], []
+    for i, t in enumerate(sol.t):
+        T_set = ur5.fk(ref(t)[0])
+        dp = sol.y[N:N + 3, i]
+        T_d = T_set.copy()
+        T_d[:3, 3] = T_set[:3, 3] + dp
+        Xe = SE3.log(np.linalg.inv(ur5.fk(TH[i])) @ T_d)[0]
+        QD.append(ur5.dls_inv(ur5.jacobian_body(TH[i])) @ (KP_TRACK * Xe))
+        # 추종오차 = 실제 EE 가 nominal setpoint 에서 벗어난 변위 (= 컴플라이언스)
+        err.append(float(np.linalg.norm(ur5.fk(TH[i])[:3, 3] - T_set[:3, 3])))
+    QD = np.array(QD) if len(QD) else np.zeros((0, N))
+    err = np.array(err)
+    vmax = np.max(np.abs(QD), axis=1) if len(QD) else np.zeros(0)
+
+    # 정착: 외란은 모션 종료(T) 후 인가되므로, '한 번 흔들린 뒤(excited)' 평형을 찾는다.
+    # (인가 순간 로봇이 정지해 있어 곧바로 정착으로 오판하는 것 방지)
+    diverged = sol.status != 0
+    settle_time = steady_state_error = None
+    if not diverged and len(sol.t):
+        vw = max(1, int(VEL_WIN * hz))
+        excited = False
+        for i in range(len(sol.t)):
+            if sol.t[i] < T:
+                continue
+            if vmax[i] >= VEL_TOL:
+                excited = True
+            if excited and np.max(vmax[max(0, i - vw):i + 1]) < VEL_TOL:
+                settle_time = float(sol.t[i])
+                steady_state_error = float(err[i])
+                break
+
     idx = _keep_idx(sol, settle_time, diverged, T)
 
     return {
