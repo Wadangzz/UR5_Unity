@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import type { ControllerSpec, JointMeta } from '@/api';
+import { POLE_PLACE, type ControllerSpec, type JointMeta } from '@/api';
 
 interface Props {
   meta: JointMeta[];
@@ -130,8 +130,8 @@ export default function ControlPanel({
             </Select>
           </div>
 
-          {/* 자동 튜닝(극배치) — 관절 2차계용. 임피던스(직교 강성)엔 N/A 라 숨김 */}
-          {controller !== 'impedance' && (
+          {/* 자동 튜닝(극배치) — 관절 2차계용. 속도제어(1차계)·임피던스엔 N/A 라 숨김 */}
+          {POLE_PLACE.includes(controller) && (
             <>
               <div className='flex items-center justify-between'>
                 <Label className='text-muted-foreground text-xs'>
@@ -182,7 +182,9 @@ export default function ControlPanel({
                 max={p.max}
                 step={1}
                 value={[gains[p.key] ?? p.default]}
-                disabled={running || (autoTune && controller !== 'impedance')}
+                disabled={
+                  running || (autoTune && POLE_PLACE.includes(controller))
+                }
                 onValueChange={([v]) => onGainChange(p.key, v)}
               />
             </div>

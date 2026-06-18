@@ -139,6 +139,10 @@ def _dls_inv(Jb):
     return Jb.T @ np.linalg.inv(Jb @ Jb.T + lam2 * np.eye(6))
 
 
+# 속도제어(resolved-rate)·어드미턴스 등에서 J† 가 필요해 공개 별칭 제공.
+dls_inv = _dls_inv
+
+
 def manipulability(theta):
     """Yoshikawa 조작성. w=√det(JJᵀ)=∏σ_i, sigma_min=min 특이값.
     w→0 / sigma_min→0 이면 특이점."""

@@ -58,7 +58,8 @@ class RunResponse(SQLModel):
     theta: list[list[float]]
     tcp: list[list[float]]
     error: list[float]
-    torque: list[list[float]]
+    torque: list[list[float]]                 # 토크제어 출력(N·m). 속도제어 시 빈 배열
+    qdot: list[list[float]] = []             # 속도제어 출력 commanded 관절속도(rad/s)
     waypoints_tcp: list[list[float]]
     settle_time: float | None = None         # 평형(정상상태) 도달 시각(s), 미도달 None
     steady_state_error: float | None = None  # 정상상태 오차 ‖θ-θ_d‖(rad)

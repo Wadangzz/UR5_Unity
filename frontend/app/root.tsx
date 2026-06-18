@@ -13,6 +13,7 @@ import ProgramList from '@/components/ProgramList';
 import Plots from '@/components/Plots';
 import {
   CONTROLLERS,
+  POLE_PLACE,
   runSimulation,
   type JointMeta,
   type RunRequest,
@@ -43,8 +44,8 @@ export default function App() {
     const spec = controllers.find((c) => c.name === controller);
     if (!spec) return;
     const g: Record<string, number> = {};
-    // 극배치 자동튜닝은 관절 2차계용 → 임피던스(직교 강성)는 항상 기본값/수동
-    if (autoTune && controller !== 'impedance') {
+    // 극배치 자동튜닝은 관절 2차계용 → 속도제어(1차계)·임피던스(직교강성)는 기본값/수동
+    if (autoTune && POLE_PLACE.includes(controller)) {
       const wn = 4 / targetTs;
       const kp = wn * wn;
       const kd = 2 * wn;

@@ -62,7 +62,27 @@ export const CONTROLLERS: ControllerSpec[] = [
       { key: 'kd', default: 60, min: 0, max: 400, label: 'D (감쇠, N·s/m)' },
     ],
   },
+  // 속도제어(MR §11.3): 1차계 — θ̇ 가 곧 출력. 게인 kp/ki 만(kd 없음), 스케일 작음.
+  {
+    name: 'joint_velocity',
+    label: '관절 속도제어',
+    params: [
+      { key: 'kp', default: 3, min: 0, max: 10 },
+      { key: 'ki', default: 0, min: 0, max: 5 },
+    ],
+  },
+  {
+    name: 'resolved_rate',
+    label: 'Resolved-Rate (직교속도)',
+    params: [
+      { key: 'kp', default: 3, min: 0, max: 10 },
+      { key: 'ki', default: 0, min: 0, max: 5 },
+    ],
+  },
 ];
+
+// 극배치(2차계) 자동튜닝이 의미있는 제어기. 속도제어(1차계)·임피던스(직교강성)는 제외.
+export const POLE_PLACE = ['pd', 'pid', 'computed_torque'];
 
 export interface RunRequest {
   waypoints?: number[][]; // 관절 경유점(rad)
@@ -82,7 +102,8 @@ export interface RunResponse {
   theta: number[][]; // [frame][6] 관절각(rad)
   tcp: number[][]; // [frame][3]
   error: number[];
-  torque: number[][]; // [frame][6]
+  torque: number[][]; // [frame][6] 토크제어 출력(N·m). 속도제어 시 빈 배열
+  qdot: number[][]; // [frame][6] 속도제어 출력 commanded 관절속도(rad/s)
   waypoints_tcp: number[][];
   settle_time: number | null; // 평형 도달 시각(s), 미도달 null
   steady_state_error: number | null; // 정상상태 오차(rad)

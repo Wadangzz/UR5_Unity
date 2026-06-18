@@ -19,17 +19,21 @@ const JOINT_COLORS = [
   '#ec4899',
 ];
 
-/** 마지막 Run 결과의 추종오차·관절토크 시계열 그래프. */
+/** 마지막 Run 결과의 추종오차 + 관절토크(토크제어) 또는 관절속도(속도제어) 그래프. */
 export default function Plots({ result }: { result: RunResponse | null }) {
   if (!result) return null;
+
+  // 속도제어는 torque 가 비고 qdot 가 채워진다 → 토크 대신 θ̇ 를 그린다.
+  const isVel = result.qdot.length > 0;
+  const series = isVel ? result.qdot : result.torque;
 
   const data = result.t.map((t, i) => {
     const row: Record<string, number> = {
       t: Number(t.toFixed(2)),
       err: result.error[i],
     };
-    result.torque[i]?.forEach((tau, j) => {
-      row[`j${j}`] = tau;
+    series[i]?.forEach((v, j) => {
+      row[`j${j}`] = v;
     });
     return row;
   });
@@ -80,7 +84,7 @@ export default function Plots({ result }: { result: RunResponse | null }) {
 
         <div className='flex-1'>
           <p className='text-muted-foreground mb-1 text-xs'>
-            관절 토크 τ (N·m)
+            {isVel ? '관절 속도 θ̇ (rad/s)' : '관절 토크 τ (N·m)'}
           </p>
           <ResponsiveContainer width='100%' height={130}>
             <LineChart
