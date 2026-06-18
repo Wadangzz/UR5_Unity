@@ -63,6 +63,23 @@ function damping(kp?: number, kd?: number, ki?: number) {
   return { wn, zeta, label, color, margin };
 }
 
+// 속도제어 PI 오차동역학: ë + Kp·ė + Ki·e = 0 → ωn=√Ki, ζ=Kp/(2√Ki).
+// 특성식 s²+Kp·s+Ki 는 Kp,Ki>0 이면 두 계수 양수 → 무조건 안정(토크 PID 와 달리
+// 적분 발산조건 없음). Ki=0 이면 1차계(진동 없음). Ki>0 일 때만 ζ/ωn 의미.
+function velDamping(kp?: number, ki?: number) {
+  if (!ki || ki <= 0 || !kp || kp <= 0) return null;
+  const wn = Math.sqrt(ki);
+  const zeta = kp / (2 * wn);
+  const label = zeta < 0.97 ? '과소감쇠' : zeta > 1.03 ? '과감쇠' : '임계감쇠';
+  const color =
+    zeta < 0.97
+      ? 'text-amber-600'
+      : zeta > 1.03
+        ? 'text-blue-600'
+        : 'text-emerald-600';
+  return { wn, zeta, label, color };
+}
+
 /** 관절 슬라이더 + 제어기/게인 튜닝 + Run 패널. */
 export default function ControlPanel({
   meta,
@@ -97,6 +114,9 @@ export default function ControlPanel({
   if (meta.length === 0) return null;
   const spec = controllers.find((c) => c.name === controller);
   const d = damping(gains.kp, gains.kd, gains.ki);
+  const isVel =
+    controller === 'joint_velocity' || controller === 'resolved_rate';
+  const vd = isVel ? velDamping(gains.kp, gains.ki) : null;
 
   return (
     <Card className='bg-card/95 supports-[backdrop-filter]:bg-card/80 w-72 backdrop-blur'>
@@ -240,6 +260,34 @@ export default function ControlPanel({
                     className={`font-medium ${d.margin < 1 ? 'text-emerald-600' : 'text-red-600'}`}
                   >
                     {d.margin < 1 ? '안정' : '발산위험'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 속도제어 PI 감쇠비 배지 — ë+Kp·ė+Ki·e=0 (2차계, 무조건 안정) */}
+          {isVel && (
+            <div className='bg-muted space-y-1 rounded-md px-2.5 py-1.5 text-xs'>
+              <div className='flex items-center justify-between'>
+                <span className='text-muted-foreground tabular-nums'>
+                  {vd
+                    ? `ζ=${vd.zeta.toFixed(2)} · ωn=${vd.wn.toFixed(1)}`
+                    : '1차계 (적분 없음)'}
+                </span>
+                <span
+                  className={`font-medium ${vd ? vd.color : 'text-emerald-600'}`}
+                >
+                  {vd ? vd.label : '안정'}
+                </span>
+              </div>
+              {vd && (
+                <div className='border-border/50 flex items-center justify-between border-t pt-1'>
+                  <span className='text-muted-foreground'>
+                    2차계 (s²+Kp·s+Ki)
+                  </span>
+                  <span className='font-medium text-emerald-600'>
+                    무조건 안정
                   </span>
                 </div>
               )}
