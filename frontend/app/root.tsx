@@ -7,6 +7,7 @@ import {
   GizmoViewport,
 } from '@react-three/drei';
 import RobotView from '@/components/RobotView';
+import WallPlane from '@/components/WallPlane';
 import ControlPanel from '@/components/ControlPanel';
 import PoseEditor from '@/components/PoseEditor';
 import ProgramList from '@/components/ProgramList';
@@ -37,6 +38,14 @@ export default function App() {
   const [controlRate, setControlRate] = useState(0); // 0=연속, >0=이산 ZOH(Hz)
   const [noise, setNoise] = useState(0); // 센서 노이즈 std(rad)
   const [noiseSeed, setNoiseSeed] = useState(0); // 노이즈 realization seed
+  // 힘/하이브리드 제어: 벽·목표 (fd 목표힘, gap 접근간격m, move_len 접선이동m)
+  const [forceTask, setForceTask] = useState({
+    fd: 20,
+    gap: 0.05,
+    move_len: 0.1,
+  });
+  const setForceTaskField = (key: 'fd' | 'gap' | 'move_len', value: number) =>
+    setForceTask((prev) => ({ ...prev, [key]: value }));
   const [push, setPush] = useState<number[]>([0, 0, 0]); // 외란 외력(N, base XYZ)
   const setPushAxis = (index: number, value: number) =>
     setPush((prev) => prev.map((p, i) => (i === index ? value : p)));
@@ -147,6 +156,7 @@ export default function App() {
         control_rate: controlRate,
         noise,
         noise_seed: seed,
+        force_task: forceTask,
         ...req,
       });
       setResult(res);
@@ -156,8 +166,14 @@ export default function App() {
       setRunning(false);
     }
   };
-  // 현재 슬라이더 자세를 목표로 ready(비특이)→목표
-  const run = () => runReq({ waypoints: [ready, [...joints]] });
+  // 힘/하이브리드는 현재 자세에서 벽을 누름(출발=현재). 그 외엔 ready→목표.
+  const isForceCtrl = controller === 'force' || controller === 'hybrid';
+  const run = () =>
+    runReq(
+      isForceCtrl
+        ? { waypoints: [[...joints]] }
+        : { waypoints: [ready, [...joints]] },
+    );
   // 티치 프로그램 순회 (현재 자세에서 출발 — 위 제어기 세팅 그대로 적용)
   const runProgram = (programId: string) =>
     runReq({ program_id: programId, start: [...joints] });
@@ -207,6 +223,8 @@ export default function App() {
           noise={noise}
           onNoiseChange={setNoise}
           noiseSeed={noiseSeed}
+          forceTask={forceTask}
+          onForceTaskChange={setForceTaskField}
           push={push}
           onPushAxisChange={setPushAxis}
           onRun={run}
@@ -251,6 +269,9 @@ export default function App() {
         <directionalLight position={[0, -5, -2]} intensity={0.4} />
 
         <RobotView joints={joints} onLoaded={handleLoaded} />
+
+        {/* 힘/하이브리드 제어가 누르는 가상 벽 (마지막 Run 결과에 있을 때만) */}
+        <WallPlane wall={result?.wall} />
 
         {/* 로봇 베이스 프레임 좌표축 (Z-up: X 빨강·Y 초록·Z 파랑) */}
         <axesHelper args={[0.4]} />

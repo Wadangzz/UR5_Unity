@@ -40,6 +40,21 @@ class FKResponse(SQLModel):
     sigma_min: float = 0.0                  # 최소 특이값 (→0 이면 특이점)
 
 
+class ForceTask(SQLModel):
+    """힘/하이브리드 제어의 환경(벽)·목표 사양. 프론트는 fd/gap/move_len 만 보내고
+    나머지는 기본값, 벽 point 는 백엔드가 시작자세 FK 로 계산해 채운다."""
+    fd: float = 20.0                             # 목표 누름힘(N)
+    gap: float = 0.05                            # 시작 시 벽까지 거리(m)
+    k_env: float = 4000.0                        # 벽 강성(N/m)
+    b_env: float = 40.0                          # 벽 감쇠(N·s/m)
+    normal: list[float] = [0.0, 0.0, 1.0]        # 벽 외향 법선(base)
+    tangent: list[float] = [1.0, 0.0, 0.0]       # 접선 이동 방향(base, hybrid)
+    move_len: float = 0.10                       # 접선 이동거리(m, hybrid)
+    move_start: float = 0.8                      # 접선 이동 시작(s, hybrid)
+    move_time: float = 1.5                       # 접선 이동 소요(s, hybrid)
+    t_end: float = 4.0                           # 시뮬 길이(s)
+
+
 class RunRequest(SQLModel):
     program_id: str | None = None
     waypoints: list[list[float]] | None = None   # 관절 경유점(rad)
@@ -58,6 +73,7 @@ class RunRequest(SQLModel):
     control_rate: float = 0.0                    # 0=연속(이상) / >0=이산 ZOH 제어율(Hz)
     noise: float = 0.0                           # 센서 측정 노이즈 std(rad) — 토크 제어만
     noise_seed: int = 0                          # 노이즈 realization seed(고정=재현성)
+    force_task: ForceTask | None = None          # 힘/하이브리드 제어 환경(벽)·목표
 
 
 class RunResponse(SQLModel):
@@ -74,3 +90,8 @@ class RunResponse(SQLModel):
     steady_state_error: float | None = None  # 정상상태 오차 ‖θ-θ_d‖(rad)
     diverged: bool = False                   # 발산 여부
     traj_error: str | None = None            # task궤적 생성 실패 사유(특이점/작업영역밖), 없으면 None
+    force: list[float] = []                   # 측정 법선반력(N) — 힘/하이브리드 제어
+    force_des: float | None = None            # 목표 힘(N) — 힘/하이브리드
+    tan_pos: list[float] = []                 # 접선 실제 변위(m) — 하이브리드
+    tan_des: list[float] = []                 # 접선 목표 변위(m) — 하이브리드
+    wall: dict[str, list[float]] | None = None  # 벽 {point, normal}(base) — 3D 렌더용

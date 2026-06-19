@@ -259,10 +259,26 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 - **검증**: 이동 중 법선힘 평균 19.5N(목표 20)·유지, 접선 추종오차 0.8mm, 발산 없음.
   회귀(force StepA F_ss 20.0·computed_torque sse 1.7e-9·pytest 7) 무손상.
 
+### 🤝 힘 제어 Step C — 프론트 UI + 3D 벽 (브라우저 통합)
+
+힘/하이브리드 제어를 웹에서 직접 실행·시각화. backend→REST→프론트 전구간 배선.
+
+- **백엔드**: `schemas.ForceTask`(fd/gap/k_env/b_env/normal/tangent/move_len/...) +
+  `RunRequest.force_task`, `RunResponse`에 `force/force_des/tan_pos/tan_des/wall` 추가
+  (`response_model`이 strip 하므로 필수). `controllers/simulate`: 힘/하이브리드면 **시작자세
+  FK 로 벽 point 계산**(프론트는 fd/gap/move_len 만 보냄) + `wall`(point·normal) 응답.
+- **프론트**: `CONTROLLERS`에 force/hybrid(게인 step 소수 지원) + `ForceTask` 타입.
+  `ControlPanel` 벽·힘목표 섹션(Fd·간격·접선이동 슬라이더). `Plots`는 force 있으면 **힘 추종
+  +(하이브리드)접선 추종** 패널로 전환. **`WallPlane`**(신규): 응답 wall 로 3D 반투명 평면 렌더
+  (법선→quaternion). 힘/하이브리드는 **현재 자세에서 출발**(run 분기).
+- **검증**: tsc/eslint 0, `pnpm build` OK. TestClient `POST /api/run`(hybrid, 중첩 force_task)
+  → 200, F_ss=목표·접선 추종·wall 계산 정상. (라이브 브라우저 스크린샷은 미실시 — 정적 검증만)
+
 ### ✅ 오늘 커밋 (branch)
 - `test:` RNE 동치성(pytest 도입) + 노이즈 seed 매 실행 변동
 - `feat:` 힘 제어 Step A — task-space 힘 제어(§11.5) + 컴플라이언트 벽 + 데모
-- (이 커밋) `feat:` 힘 제어 Step B — 하이브리드 모션/힘(§11.6, 투영 P) + 데모
+- `feat:` 힘 제어 Step B — 하이브리드 모션/힘(§11.6, 투영 P) + 데모
+- (이 커밋) `feat:` 힘 제어 Step C — 프론트 UI(force/hybrid·Fd·접선) + 3D 벽
 
 ---
 
@@ -283,7 +299,8 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
       제어율 낮추면 불안정 재현, 노이즈 chatter. numba 덕에 1kHz ~4s 현실화.
 - [~] **힘제어** — [x] Step A: task-space 힘 제어(§11.5, 식 11.54) + 컴플라이언트 벽 + 데모 ✅ 2026-06-19
       [x] Step B: 하이브리드 모션/힘(§11.6, 투영 P 식 11.60/11.61) + 데모 ✅ 2026-06-19
-      (backend `_run_force`·`_run_hybrid`·`force_task`만) → [ ] 프론트 UI(벽·목표힘·접선 슬라이더, 힘 플롯)
+      [x] Step C: 프론트 UI(force/hybrid·Fd·접선 슬라이더, 힘 플롯) + 3D 벽 평면 ✅ 2026-06-19
+      → [ ] 라이브 브라우저 스크린샷 검증(선택)
 - [ ] **`numba-dynamics` 브랜치 → develop 머지** (parity pytest 통과 + 노이즈 seed 정리 완료 → 머지 가능)
 - [ ] (선택) fd 추가 최적화: 해석적 SE(3) 역행렬 → 이산 더 빠르게(2kHz 기본 가능)
 - [ ] **redundancy/널공간** 제어(7-DOF, `(I−J†J)θ̇₀`) — 멀티로봇 후

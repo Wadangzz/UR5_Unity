@@ -23,6 +23,10 @@ const JOINT_COLORS = [
 export default function Plots({ result }: { result: RunResponse | null }) {
   if (!result) return null;
 
+  // 힘/하이브리드 제어는 force 시계열이 채워진다 → 힘 추종 그래프로 전환.
+  if (result.force && result.force.length > 0)
+    return <ForcePlots result={result} />;
+
   // 속도제어는 torque 가 비고 qdot 가 채워진다 → 토크 대신 θ̇ 를 그린다.
   const isVel = result.qdot.length > 0;
   const series = isVel ? result.qdot : result.torque;
@@ -109,6 +113,117 @@ export default function Plots({ result }: { result: RunResponse | null }) {
                   strokeWidth={1.2}
                 />
               ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** 힘/하이브리드 제어 결과: 법선 힘 추종 + (하이브리드면) 접선 위치 추종. */
+function ForcePlots({ result }: { result: RunResponse }) {
+  const fdes = result.force_des ?? 0;
+  const hasTan = (result.tan_pos?.length ?? 0) > 0;
+  const data = result.t.map((t, i) => ({
+    t: Number(t.toFixed(2)),
+    force: result.force?.[i] ?? 0,
+    fdes,
+    tan: 1000 * (result.tan_pos?.[i] ?? 0), // mm
+    tdes: 1000 * (result.tan_des?.[i] ?? 0),
+    err: result.error[i], // 힘 오차(N)
+  }));
+  const axis = { fontSize: 10, stroke: '#94a3b8' };
+  const last = result.force?.[result.force.length - 1] ?? 0;
+
+  return (
+    <Card className='bg-card/95 supports-[backdrop-filter]:bg-card/80 w-[560px] backdrop-blur'>
+      <CardHeader className='pb-2'>
+        <div className='flex items-center justify-between'>
+          <CardTitle className='text-sm'>힘 제어 결과</CardTitle>
+          {result.diverged ? (
+            <span className='text-xs font-medium text-red-600'>⚠ 발산</span>
+          ) : (
+            <span className='text-muted-foreground text-xs tabular-nums'>
+              법선 힘 {last.toFixed(1)} / {fdes.toFixed(0)} N
+              {hasTan && ` · 접선 ${data[data.length - 1].tan.toFixed(0)}mm`}
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className='flex gap-4'>
+        <div className='flex-1'>
+          <p className='text-muted-foreground mb-1 text-xs'>
+            법선 힘 (N) — 목표 Fd 추종
+          </p>
+          <ResponsiveContainer width='100%' height={130}>
+            <LineChart
+              data={data}
+              margin={{ top: 4, right: 8, bottom: 0, left: -8 }}
+            >
+              <CartesianGrid strokeDasharray='3 3' stroke='#e2e8f0' />
+              <XAxis dataKey='t' tick={axis} unit='s' />
+              <YAxis tick={axis} width={38} />
+              <Tooltip contentStyle={{ fontSize: 11 }} />
+              <Line
+                type='monotone'
+                dataKey='fdes'
+                stroke='#94a3b8'
+                strokeDasharray='4 4'
+                dot={false}
+                strokeWidth={1.2}
+              />
+              <Line
+                type='monotone'
+                dataKey='force'
+                stroke='#2563eb'
+                dot={false}
+                strokeWidth={1.6}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className='flex-1'>
+          <p className='text-muted-foreground mb-1 text-xs'>
+            {hasTan ? '접선 위치 (mm) — 직선 추종' : '힘 오차 |Fd − F| (N)'}
+          </p>
+          <ResponsiveContainer width='100%' height={130}>
+            <LineChart
+              data={data}
+              margin={{ top: 4, right: 8, bottom: 0, left: -8 }}
+            >
+              <CartesianGrid strokeDasharray='3 3' stroke='#e2e8f0' />
+              <XAxis dataKey='t' tick={axis} unit='s' />
+              <YAxis tick={axis} width={38} />
+              <Tooltip contentStyle={{ fontSize: 11 }} />
+              {hasTan ? (
+                <>
+                  <Line
+                    type='monotone'
+                    dataKey='tdes'
+                    stroke='#94a3b8'
+                    strokeDasharray='4 4'
+                    dot={false}
+                    strokeWidth={1.2}
+                  />
+                  <Line
+                    type='monotone'
+                    dataKey='tan'
+                    stroke='#10b981'
+                    dot={false}
+                    strokeWidth={1.6}
+                  />
+                </>
+              ) : (
+                <Line
+                  type='monotone'
+                  dataKey='err'
+                  stroke='#ef4444'
+                  dot={false}
+                  strokeWidth={1.5}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>

@@ -6,7 +6,7 @@ from app.core import ur5_model as ur5
 from app.core.robot_math import SE3
 from app import sim, realism
 from app.models import Pose
-from app.schemas import RunRequest
+from app.schemas import RunRequest, ForceTask
 
 
 def run(req: RunRequest, session: Session):
@@ -30,6 +30,18 @@ def run(req: RunRequest, session: Session):
     else:
         raise HTTPException(400, "program_id 또는 waypoints 중 하나는 필요합니다")
 
+    # 힘/하이브리드 제어: 벽 평면을 시작자세 EE 기준으로 배치(프론트는 fd/gap 만 보냄).
+    # point = 시작 EE − gap·법선 (접근방향 −법선 으로 gap 만큼 떨어진 벽면).
+    force_task = None
+    if req.controller in ("force", "hybrid"):
+        ft = (req.force_task or ForceTask()).model_dump()
+        normal = np.array(ft["normal"], float)
+        normal = normal / np.linalg.norm(normal)
+        p_start = ur5.fk(np.array(waypoints[0]))[:3, 3]
+        ft["normal"] = normal.tolist()
+        ft["point"] = (p_start - normal * ft["gap"]).tolist()
+        force_task = ft
+
     plant, ctrl = realism.build_models(req.payload, req.model_scale)
     result = sim.run_simulation(
         waypoints, controller=req.controller, gains=req.gains,
@@ -37,7 +49,10 @@ def run(req: RunRequest, session: Session):
         plant=plant, ctrl=ctrl, disturbance=req.disturbance,
         traj_mode=req.traj_mode, friction=req.friction, tau_max=req.tau_max,
         control_rate=req.control_rate, noise=req.noise,
-        noise_seed=req.noise_seed)
+        noise_seed=req.noise_seed, force_task=force_task)
+    if force_task is not None:                    # 3D 벽 렌더용 위치·법선
+        result["wall"] = {"point": force_task["point"],
+                          "normal": force_task["normal"]}
 
     # 재생 중 직교좌표·manipulability 를 라이브로 보이게: θ(t) 에서 EE pose·σ_min
     # 시계열을 한 번에 계산해 응답에 실어 보낸다 (프레임당 REST 왕복 없이 인덱싱).

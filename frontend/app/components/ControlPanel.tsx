@@ -43,6 +43,8 @@ interface Props {
   noise: number;
   onNoiseChange: (value: number) => void;
   noiseSeed: number;
+  forceTask: { fd: number; gap: number; move_len: number };
+  onForceTaskChange: (key: 'fd' | 'gap' | 'move_len', value: number) => void;
   push: number[];
   onPushAxisChange: (index: number, value: number) => void;
   onRun: () => void;
@@ -117,6 +119,8 @@ export default function ControlPanel({
   noise,
   onNoiseChange,
   noiseSeed,
+  forceTask,
+  onForceTaskChange,
   push,
   onPushAxisChange,
   onRun,
@@ -237,13 +241,15 @@ export default function ControlPanel({
                   {p.label ?? p.key.toUpperCase()}
                 </Label>
                 <span className='text-xs tabular-nums'>
-                  {(gains[p.key] ?? p.default).toFixed(0)}
+                  {(gains[p.key] ?? p.default).toFixed(
+                    p.step && p.step < 1 ? 1 : 0,
+                  )}
                 </span>
               </div>
               <Slider
                 min={p.min}
                 max={p.max}
-                step={1}
+                step={p.step ?? 1}
                 value={[gains[p.key] ?? p.default]}
                 disabled={
                   running || (autoTune && POLE_PLACE.includes(controller))
@@ -252,6 +258,71 @@ export default function ControlPanel({
               />
             </div>
           ))}
+
+          {/* 힘/하이브리드 제어: 환경(벽)·목표 사양 (게인과 별개) */}
+          {(controller === 'force' || controller === 'hybrid') && (
+            <div className='bg-muted/50 space-y-3 rounded-md p-2.5'>
+              <p className='text-muted-foreground text-xs font-medium'>
+                벽 · 힘 목표
+              </p>
+              <div className='space-y-1.5'>
+                <div className='flex items-center justify-between'>
+                  <Label className='text-muted-foreground text-xs'>
+                    목표 힘 Fd
+                  </Label>
+                  <span className='text-xs tabular-nums'>
+                    {forceTask.fd.toFixed(0)} N
+                  </span>
+                </div>
+                <Slider
+                  min={0}
+                  max={50}
+                  step={1}
+                  value={[forceTask.fd]}
+                  disabled={running}
+                  onValueChange={([v]) => onForceTaskChange('fd', v)}
+                />
+              </div>
+              <div className='space-y-1.5'>
+                <div className='flex items-center justify-between'>
+                  <Label className='text-muted-foreground text-xs'>
+                    접근 간격
+                  </Label>
+                  <span className='text-xs tabular-nums'>
+                    {(forceTask.gap * 1000).toFixed(0)} mm
+                  </span>
+                </div>
+                <Slider
+                  min={0.02}
+                  max={0.1}
+                  step={0.005}
+                  value={[forceTask.gap]}
+                  disabled={running}
+                  onValueChange={([v]) => onForceTaskChange('gap', v)}
+                />
+              </div>
+              {controller === 'hybrid' && (
+                <div className='space-y-1.5'>
+                  <div className='flex items-center justify-between'>
+                    <Label className='text-muted-foreground text-xs'>
+                      접선 이동 (선 긋기)
+                    </Label>
+                    <span className='text-xs tabular-nums'>
+                      {(forceTask.move_len * 1000).toFixed(0)} mm
+                    </span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={0.2}
+                    step={0.01}
+                    value={[forceTask.move_len]}
+                    disabled={running}
+                    onValueChange={([v]) => onForceTaskChange('move_len', v)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 감쇠비 / 적분 안정여유 배지 (관절 2차계 기준 — 임피던스 제외) */}
           {controller !== 'impedance' && d && (

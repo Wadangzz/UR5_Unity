@@ -22,6 +22,7 @@ export interface ControllerSpec {
     default: number;
     min: number;
     max: number;
+    step?: number; // 슬라이더 스텝(기본 1). 힘 게인처럼 소수면 0.1 등
     label?: string;
   }[];
 }
@@ -90,10 +91,64 @@ export const CONTROLLERS: ControllerSpec[] = [
       { key: 'k', default: 600, min: 0, max: 3000, label: 'K (강성, N/m)' },
     ],
   },
+  // 힘 제어(MR §11.5): 가상 벽을 목표 힘으로 누름. PI 힘 피드백(kfp/kfi).
+  {
+    name: 'force',
+    label: '힘 제어 (§11.5)',
+    params: [
+      {
+        key: 'kfp',
+        default: 0.5,
+        min: 0,
+        max: 2,
+        step: 0.1,
+        label: 'Kfp (힘 P)',
+      },
+      {
+        key: 'kfi',
+        default: 4,
+        min: 0,
+        max: 20,
+        step: 0.5,
+        label: 'Kfi (힘 I)',
+      },
+    ],
+  },
+  // 하이브리드 모션/힘(MR §11.6): 법선=힘·접선=위치 동시(투영 P). "칠판 선 긋기".
+  {
+    name: 'hybrid',
+    label: '하이브리드 모션/힘 (§11.6)',
+    params: [
+      { key: 'kp', default: 100, min: 0, max: 400, label: 'Kp (모션)' },
+      {
+        key: 'kfp',
+        default: 0.5,
+        min: 0,
+        max: 2,
+        step: 0.1,
+        label: 'Kfp (힘 P)',
+      },
+      {
+        key: 'kfi',
+        default: 4,
+        min: 0,
+        max: 20,
+        step: 0.5,
+        label: 'Kfi (힘 I)',
+      },
+    ],
+  },
 ];
 
 // 극배치(2차계) 자동튜닝이 의미있는 제어기. 속도제어(1차계)·임피던스(직교강성)는 제외.
 export const POLE_PLACE = ['pd', 'pid', 'computed_torque'];
+
+// 힘/하이브리드 제어의 환경(벽)·목표. 프론트는 이 3개만 보내고 나머지는 백엔드 기본값.
+export interface ForceTask {
+  fd: number; // 목표 누름힘(N)
+  gap: number; // 시작 시 벽까지 거리(m)
+  move_len: number; // 접선 이동거리(m, 하이브리드)
+}
 
 export interface RunRequest {
   waypoints?: number[][]; // 관절 경유점(rad)
@@ -113,6 +168,7 @@ export interface RunRequest {
   control_rate?: number; // 0=연속(이상) / >0=이산 ZOH 제어율(Hz) — 토크 제어
   noise?: number; // 센서 측정 노이즈 std(rad), 이산 ZOH — 토크 제어
   noise_seed?: number; // 노이즈 realization seed(고정=재현성, 바꾸면 다른 패턴)
+  force_task?: ForceTask; // 힘/하이브리드 제어 환경(벽)·목표
 }
 
 export interface RunResponse {
@@ -129,6 +185,11 @@ export interface RunResponse {
   steady_state_error: number | null; // 정상상태 오차(rad)
   diverged: boolean; // 발산 여부
   traj_error: string | null; // task궤적 실패 사유(특이점/작업영역밖), 없으면 null
+  force?: number[]; // 측정 법선반력(N) — 힘/하이브리드
+  force_des?: number | null; // 목표 힘(N)
+  tan_pos?: number[]; // 접선 실제 변위(m) — 하이브리드
+  tan_des?: number[]; // 접선 목표 변위(m) — 하이브리드
+  wall?: { point: number[]; normal: number[] } | null; // 벽(3D 렌더용)
 }
 
 // URDF 에서 추출한 관절 메타 (슬라이더 범위용, rad)
