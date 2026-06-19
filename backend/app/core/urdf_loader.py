@@ -18,7 +18,7 @@ def load_mr_model(urdf_path, ee_link=None):
     미지정 시 직렬 arm 가정으로 액추에이터 관절을 문서 순서대로(UR·iiwa 충족).
     """
     r = URDF.load(urdf_path)
-    links = {l.name: l for l in r.robot.links}
+    links = {lk.name: lk for lk in r.robot.links}
     if ee_link is not None:
         path = _path_joints(r, ee_link)              # fixed 포함 경로 순서
     else:
