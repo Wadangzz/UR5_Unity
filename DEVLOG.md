@@ -280,19 +280,44 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
   · Run 버튼 라벨 제어기별 분기(`현재자세에서 벽 누름`/`벽 누르며 선 긋기`) — 힘 제어가 티칭이
     아님을 명확히.
 
+### 🤖 멀티로봇 Phase 1 — URDF → MR 파라미터 추출기 (검증 완료)
+
+엔진은 이미 generic(Mlist/Glist/Slist 인자, numba n-무관) → 빠진 건 임의 URDF에서 그 값 추출.
+`mr_urdf_loader`는 urdfpy(py3.12 `collections.Mapping` 제거로 깨짐) 의존이라 폐기 →
+유지보수되는 **`yourdfpy`로 직접 추출기 작성**.
+
+- `app/core/urdf_loader.py`: `load_mr_model(urdf_path, ee_link=None)` → `{Mlist, Glist, Slist,
+  M_home, joint_names, joint_limits, n}`. 스크류축 `Sᵢ=(ωᵢ, −ωᵢ×qᵢ)`, COM 프레임 Mlist,
+  공간관성 `G=blockdiag(I_com, m·I₃)`. 직렬 arm은 자동(문서순), 그리퍼 로봇은 ee_link로
+  base→EE **경로만** 추출(분기 제외).
+- **검증**: UR5 하드코딩값(ur5_model)과 비교 — Slist `9.8e-12` · Mlist `4.9e-12` · **Glist 정확 0**.
+  panda(ee=panda_link8) **n=7**, iiwa14 **n=7** forward_dynamics 동작(엔진 n-무관 확인).
+- 남은 통합: RobotModel 추상화(fk/jac/ik 일반화) → 레지스트리/`/api/robots` → sim·controllers
+  파라미터화(전역 ur5 49곳) → 프론트 셀렉터. (`yourdfpy`는 dev-dep → 런타임 쓰려면 main으로)
+
+### 🎤 발표자료 (docs/ 로컬, gitignore)
+
+세미나용 슬라이드 제작 — **본편(데모/직관 12장) + 부록(전문 수식 8장)** HTML(단일 파일,
+오프라인 MathJax + 인라인 SVG)과 JLT 템플릿 기반 PPTX(python-pptx, 디자인 도형 복제). Lie군·
+스크류·exp/log·Rodrigues·SE(3)·Adjoint·RNE·제어법칙 + **ROS2/Isaac Sim API 매핑** 슬라이드.
+`docs/`로 이동(gitignore) — 교재 PDF처럼 로컬 보관.
+
 ### ✅ 오늘 커밋 (branch)
 - `test:` RNE 동치성(pytest 도입) + 노이즈 seed 매 실행 변동
 - `feat:` 힘 제어 Step A — task-space 힘 제어(§11.5) + 컴플라이언트 벽 + 데모
 - `feat:` 힘 제어 Step B — 하이브리드 모션/힘(§11.6, 투영 P) + 데모
-- (이 커밋) `feat:` 힘 제어 Step C — 프론트 UI(force/hybrid·Fd·접선) + 3D 벽
+- `feat:` 힘 제어 Step C — 프론트 UI(force/hybrid·Fd·접선) + 3D 벽
+- `feat:` 힘 제어 벽=EE 도구축 방향 + Run 라벨 제어기별
+- (이 커밋) `feat:` 멀티로봇 Phase 1 — URDF→MR 파라미터 추출기(yourdfpy, UR5 검증)
 
 ---
 
 ## 📋 다음 할 것 (TODO)
 
-- [ ] **멀티로봇** — ⭐엔진 이미 generic(동역학 Mlist/Glist/Slist 인자, numba n-무관) → 알고리즘 0.
-      (b) `mr_urdf_loader` 로 `{Mlist,Glist,Slist}` 추출 + 메시 서빙 일반화 + 프론트 로봇 선택,
-      → 그 뒤 (a) **URDF 업로드**. (7-DOF 붙으면 널공간 제어도 열림)
+- [~] **멀티로봇** — ⭐엔진 generic(numba n-무관). [x] **Phase 1: URDF 추출기**(`urdf_loader.py`,
+      yourdfpy, UR5 검증·panda/iiwa 7-DOF) ✅ 2026-06-19. mr_urdf_loader는 urdfpy(py3.12 깨짐)라 폐기.
+      [ ] Phase 2 RobotModel(fk/jac/ik 일반화) → [ ] 레지스트리/`/api/robots` → [ ] sim·controllers
+      파라미터화(전역 ur5 49곳) → [ ] 프론트 셀렉터 + 로봇별 메시 → [ ] URDF 업로드. (7-DOF 널공간 제어도)
 - [x] **속도제어**(관절 θ̇_d / 직교 resolved-rate `J†`) ✅ 2026-06-18
       └ **순수 토크 입력 모드**(§11.4)는 τ 입력 스키마 필요 → 보류
 - [x] **어드미턴스**(§11.7.2) ✅ 2026-06-18
