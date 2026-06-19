@@ -225,8 +225,26 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
   (실제 센서처럼 매 실행 다른 realization). seed 가 명시 정수라 추후 '고정/재현' 토글 가능.
 - 검증: pytest 7 passed, seed 같으면 재현·다르면 다른 패턴 확인, tsc/eslint 0, ruff(신규파일) clean.
 
+### 🤝 힘 제어 Step A — task-space 힘 제어 (MR §11.5, backend+데모)
+
+교재(`docs/Modern_Robotics.pdf` §11.5–11.6) 정독 후, "힘 제어(§11.5) → 하이브리드(§11.6)"
+순서로 쌓기로. Step A = 순수 힘 제어부터(backend+데모만, 프론트/스키마는 Step B).
+
+- `sim._run_force` (추가만, 기존 러너 무수정): `τ = g̃ + Jbᵀ(Fd + Kfp·Fe + Kfi∫Fe − Kdamp·V)`
+  (식 11.54). 디스패처에 `force` 분기 + `force_task` 파라미터.
+- **환경 = 컴플라이언트 평면 벽**(penalty `f = K_env·δ + B_env·δ̇`). 교재 §11.6 은 강체구속
+  `A(θ)V=0` 가정이나 수치불안정 → §11.7 이 밝히듯 강성 큰 스프링-댐퍼로 근사. 이 반력이
+  곧 힘센서 측정값 F_meas 이자 plant 의 Ftip(폐루프 힘 피드백). 적분은 **접촉 중에만**(windup 방지).
+- **`Ftip` 부호 규약 확정**: 이 코드 = 'EE 가 환경에 가하는 렌치'(MR 표준). 환경반력을 부호
+  그대로 넣어 정피드백(벽 633mm 관통)→ `Ftip = −F_env` 로 해결. (수치테스트로 규약 확인)
+  · ⚠️ 같은 규약상 기존 `_run_torque` 외란 Ftip 은 주석("끝단 외력")과 방향 반대 의심 — 추후 확인 TODO.
+- `demos/force_demo.py`: READY 에서 벽을 20N 으로 누름 → 3패널(힘추종/오차/접근·침투).
+- **검증**: 정상상태 힘 **20.000N(오차 0%)**, 침투 **5.00mm = 이론 Fd/K_env 정확일치**, 정착 0.73s,
+  발산 없음. 회귀(computed_torque sse 1.7e-9·impedance·pytest 7) 무손상.
+
 ### ✅ 오늘 커밋 (branch)
-- (이 커밋) `test:` RNE 동치성(pytest 도입) + 노이즈 seed 매 실행 변동
+- `test:` RNE 동치성(pytest 도입) + 노이즈 seed 매 실행 변동
+- (이 커밋) `feat:` 힘 제어 Step A — task-space 힘 제어(§11.5) + 컴플라이언트 벽 + 데모
 
 ---
 
@@ -245,8 +263,10 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
       numpy 와 비트일치, fd 3.5ms→254µs(~14x), 시뮬 2-3.5s→~0.3s(~7x). 부팅 warmup.
 - [x] **이산 ZOH 제어 + 센서노이즈** ✅ (branch) — `control_rate`(0=연속/>0=이산), 하이브리드.
       제어율 낮추면 불안정 재현, 노이즈 chatter. numba 덕에 1kHz ~4s 현실화.
-- [ ] **힘제어**(hybrid position/force §11.6) — 제어측(렌치 `τ=Jᵀ·F`·Ftip 배선·빠른동역학) 준비됨.
-      **접촉/환경 모델**(가상 표면→Ftip)만 지으면 가능 + 하이브리드 투영 P(식 11.61)
+- [~] **힘제어** — [x] Step A: task-space 힘 제어(§11.5, 식 11.54) + 컴플라이언트 벽 + 데모 ✅ 2026-06-19
+      (backend `_run_force`·`force_task`만, 프론트/스키마 미적용)
+      [ ] Step B: 하이브리드 모션/힘(§11.6) — 투영행렬 `P = I − Aᵀ(AΛ⁻¹Aᵀ)⁻¹AΛ⁻¹`(식 11.60)
+      로 법선=힘·접선=위치 동시(식 11.61). [ ] 프론트 UI(벽·목표힘 슬라이더, 힘 플롯)
 - [ ] **`numba-dynamics` 브랜치 → develop 머지** (parity pytest 통과 + 노이즈 seed 정리 완료 → 머지 가능)
 - [ ] (선택) fd 추가 최적화: 해석적 SE(3) 역행렬 → 이산 더 빠르게(2kHz 기본 가능)
 - [ ] **redundancy/널공간** 제어(7-DOF, `(I−J†J)θ̇₀`) — 멀티로봇 후

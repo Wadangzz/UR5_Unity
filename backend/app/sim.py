@@ -44,7 +44,7 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
                    gravity_comp=True, t_seg=1.2, hold=0.6, hz=30,
                    plant=None, ctrl=None, disturbance=None, traj_mode="joint",
                    friction=0.0, tau_max=0.0, control_rate=0.0, noise=0.0,
-                   noise_seed=0):
+                   noise_seed=0, force_task=None):
     """관절 경유점(rad)을 제어기로 순회. → {t, theta, tcp, error, torque, qdot, ...}.
 
     궤적생성(traj_mode)과 제어기는 직교(독립):
@@ -64,6 +64,8 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
 
     if controller == "admittance":
         result = _run_admittance(WP, ref, T, gains, hz, disturbance)
+    elif controller == "force":
+        result = _run_force(WP, gains, hz, plant, force_task)
     elif controller in VELOCITY_CONTROLLERS:
         result = _run_velocity(WP, ref, T, controller, gains, hz)
     else:
@@ -579,6 +581,112 @@ def _run_admittance(WP, ref, T, gains, hz, disturbance):
         "error": [err[i] for i in idx],
         "torque": [],
         "qdot": QD[idx].tolist(),
+        "waypoints_tcp": [ur5.fk(w)[:3, 3].tolist() for w in WP],
+        "settle_time": settle_time,
+        "steady_state_error": steady_state_error,
+        "diverged": bool(diverged),
+    }
+
+
+# ----------------------------------------------------------------------
+#  토크 plant — 힘 제어 (MR §11.5, 식 11.51/11.54)
+# ----------------------------------------------------------------------
+def _run_force(WP, gains, hz, plant, force_task):
+    """task-space 힘 제어: 가상 벽을 목표 힘으로 누른다 (토크 plant).
+
+    τ = g̃(θ) + Jbᵀ(Fd + Kfp·Fe + Kfi∫Fe − Kdamp·V)   (MR 식 11.54)
+    여기서 Fe = Fd − F_meas (힘 오차), V = Jb·θ̇ (body twist).
+
+    환경은 컴플라이언트(penalty) 평면 벽: 침투 시 법선 반력 f = K_env·δ + B_env·δ̇.
+    (교재 §11.6 은 강체 구속 A(θ)V=0 을 가정하나 수치적으로 불안정 → §11.7 이 밝히듯
+    실제 환경은 컴플라이언스가 불가피하므로 강성 큰 스프링-댐퍼로 근사한다.)
+    이 반력이 곧 '힘센서 측정값' F_meas 이자 plant 의 Ftip 이 된다(폐루프 힘 피드백).
+
+    force_task: {normal(외향 단위법선,base), point(벽면 한 점,base), fd(목표 누름힘 N),
+                 k_env, b_env, t_end}.  gains: {kfp, kfi, kdamp}.
+    """
+    ft = force_task or {}
+    n = np.asarray(ft.get("normal", [0.0, 0.0, 1.0]), float)
+    n = n / np.linalg.norm(n)                    # 벽 외향 단위법선(접근 방향의 반대)
+    p_w = np.asarray(ft.get("point", [0.0, 0.0, 0.0]), float)
+    fd = float(ft.get("fd", 20.0))               # 목표 누름힘(−n 방향, N)
+    k_env = float(ft.get("k_env", 4000.0))       # 벽 강성 N/m
+    b_env = float(ft.get("b_env", 40.0))         # 벽 감쇠 N·s/m
+    t_end = float(ft.get("t_end", 4.0))
+    Kfp = float(gains.get("kfp", 0.5))
+    Kfi = float(gains.get("kfi", 4.0))
+    Kdamp = float(gains.get("kdamp", 25.0))
+    plant = plant or MODEL
+    Mp, Gp, Sp = df.stack_model(*plant)
+
+    def contact(th, dth):
+        """벽 접촉 상태 → (f_meas 법선반력 N, δ 침투깊이 m, F_env_base 3-force)."""
+        Tee = ur5.fk(th)
+        R, p = Tee[:3, :3], Tee[:3, 3]
+        delta = max(0.0, -float(n @ (p - p_w)))             # 평면 침투깊이(+면 비접촉)
+        if delta <= 0.0:
+            return 0.0, 0.0, np.zeros(3)
+        pdot = R @ (ur5.jacobian_body(th) @ dth)[3:6]       # base EE 선속도
+        ddelta = -float(n @ pdot)                           # 침투 속도
+        f_meas = max(0.0, k_env * delta + b_env * ddelta)   # 법선반력(벽은 밀기만)
+        return f_meas, delta, n * f_meas                    # 반력은 +n(로봇 밀어냄)
+
+    def rhs(t, x):
+        th, dth, Ie = x[:N], x[N:2 * N], x[2 * N]
+        R = ur5.fk(th)[:3, :3]
+        f_meas, delta, F_env = contact(th, dth)
+        fe = fd - f_meas
+        Jb = ur5.jacobian_body(th)
+        # 명령 렌치(누름 = −n 방향), body 프레임으로 변환해 Jbᵀ 적용
+        F_cmd = -n * (fd + Kfp * fe + Kfi * Ie)
+        wrench_b = np.concatenate([np.zeros(3), R.T @ F_cmd])
+        g = df.gravity_forces(th, ur5.GRAVITY, Mp, Gp, Sp)
+        tau = Jb.T @ (wrench_b - Kdamp * (Jb @ dth)) + g
+        # Ftip 규약 = 'EE 가 환경에 가하는 렌치'(MR 표준). 환경이 EE 를 +n 으로
+        # 미는 반력 F_env 를 표현하려면 부호를 뒤집어 −F_env 를 넣는다.
+        Ftip_b = np.concatenate([np.zeros(3), R.T @ (-F_env)])
+        ddth = df.forward_dynamics(th, dth, tau, ur5.GRAVITY, Ftip_b, Mp, Gp, Sp)
+        dIe = fe if delta > 0.0 else 0.0            # 적분은 접촉 중에만(자유공간 windup 방지)
+        return np.concatenate([dth, ddth, [dIe]])
+
+    x0 = np.concatenate([WP[0], np.zeros(N), [0.0]])
+    t_eval = np.linspace(0, t_end, int(t_end * hz) + 1)
+    # 강체에 가까운 벽 + 폐루프 → stiff. 토크제어와 동일하게 Radau.
+    sol = solve_ivp(rhs, (0, t_end), x0, t_eval=t_eval, method="Radau",
+                    rtol=1e-4, atol=1e-7, events=_blowup_event())
+
+    TH, DTH = sol.y[:N].T, sol.y[N:2 * N].T
+    fmeas, err = [], []
+    for i in range(len(sol.t)):
+        fm, _, _ = contact(TH[i], DTH[i])
+        fmeas.append(fm)
+        err.append(abs(fd - fm))                   # 추종오차 = 힘 오차(N)
+    fmeas, err = np.array(fmeas), np.array(err)
+    vmax = (np.max(np.abs(DTH), axis=1) if len(sol.t) else np.zeros(0))
+
+    # 정착: '한 번 움직였다가(excited)' 속도가 잦아든 시점 = 접촉 후 평형
+    diverged = sol.status != 0
+    settle_time = steady_state_error = None
+    if not diverged and len(sol.t):
+        vw = max(1, int(VEL_WIN * hz))
+        excited = False
+        for i in range(len(sol.t)):
+            if vmax[i] >= VEL_TOL:
+                excited = True
+            if excited and np.max(vmax[max(0, i - vw):i + 1]) < VEL_TOL:
+                settle_time = float(sol.t[i])
+                steady_state_error = float(err[i])
+                break
+
+    return {
+        "t": sol.t.tolist(),
+        "theta": TH.tolist(),
+        "tcp": [ur5.fk(TH[i])[:3, 3].tolist() for i in range(len(sol.t))],
+        "error": err.tolist(),                     # 힘 오차(N)
+        "torque": [],
+        "qdot": [],
+        "force": fmeas.tolist(),                   # 측정 법선반력(N)
+        "force_des": fd,
         "waypoints_tcp": [ur5.fk(w)[:3, 3].tolist() for w in WP],
         "settle_time": settle_time,
         "steady_state_error": steady_state_error,
