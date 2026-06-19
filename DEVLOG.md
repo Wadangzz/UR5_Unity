@@ -309,7 +309,9 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 - `feat:` 힘 제어 Step C — 프론트 UI(force/hybrid·Fd·접선) + 3D 벽
 - `feat:` 힘 제어 벽=EE 도구축 방향 + Run 라벨 제어기별
 - `feat:` 멀티로봇 Phase 1 — URDF→MR 파라미터 추출기(yourdfpy, UR5 검증)
-- (이 커밋) `feat:` 멀티로봇 Phase 2 — RobotModel(기구학 일반화, ur5_model 재현·URDF IK 검증)
+- `feat:` 멀티로봇 Phase 2 — RobotModel(기구학 일반화, ur5_model 재현·URDF IK 검증)
+- `feat:` 발표 슬라이드 React 라우트(/slides, Tailwind+shadcn+KaTeX)
+- (이 커밋) `feat:` 멀티로봇 Phase 3 — 레지스트리 + /api/robots (ur5/iiwa14/panda)
 
 ---
 
@@ -319,8 +321,10 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
       yourdfpy, UR5 검증·panda/iiwa 7-DOF) ✅ 2026-06-19. mr_urdf_loader는 urdfpy(py3.12 깨짐)라 폐기.
       [x] **Phase 2 RobotModel**(`robot_model.py`, fk/jac/ik/manip/dls 일반화) ✅ 2026-06-19
       — UR5 상수 모델이 ur5_model 함수와 diff 0, URDF 로드 panda/iiwa IK 왕복 OK.
-      [ ] 레지스트리/`/api/robots` → [ ] sim·controllers 파라미터화(전역 ur5 49곳)
-      → [ ] 프론트 셀렉터 + 로봇별 메시 → [ ] URDF 업로드. (7-DOF 널공간 제어도)
+      [x] **Phase 3 레지스트리 + `/api/robots`**(`robot_registry.py`·`routers/robots.py`) ✅ 2026-06-19
+      — ur5/iiwa14/panda 지연로딩·캐시, 목록+상세(관절·한계·ready TCP). yourdfpy→main dep.
+      [ ] sim·controllers 파라미터화(전역 ur5 49곳) → [ ] 프론트 셀렉터 + 로봇별 메시
+      → [ ] URDF 업로드. (7-DOF 널공간 제어도)
 - [x] **속도제어**(관절 θ̇_d / 직교 resolved-rate `J†`) ✅ 2026-06-18
       └ **순수 토크 입력 모드**(§11.4)는 τ 입력 스키마 필요 → 보류
 - [x] **어드미턴스**(§11.7.2) ✅ 2026-06-18

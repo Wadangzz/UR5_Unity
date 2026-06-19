@@ -103,6 +103,7 @@ class RobotModel:
     def from_urdf(cls, urdf_path, ee_link=None, **kw):
         from app.core.urdf_loader import load_mr_model
         m = load_mr_model(urdf_path, ee_link)
-        return cls(m["Mlist"], m["Glist"], m["Slist"], m["M_home"],
-                   name=m["name"], joint_names=m["joint_names"],
-                   joint_limits=m["joint_limits"], **kw)
+        opts = dict(name=m["name"], joint_names=m["joint_names"],
+                    joint_limits=m["joint_limits"])
+        opts.update(kw)                          # 호출자 인자(name/ready/gravity) 우선
+        return cls(m["Mlist"], m["Glist"], m["Slist"], m["M_home"], **opts)
