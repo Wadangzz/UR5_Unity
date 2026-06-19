@@ -66,6 +66,8 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
         result = _run_admittance(WP, ref, T, gains, hz, disturbance)
     elif controller == "force":
         result = _run_force(WP, gains, hz, plant, force_task)
+    elif controller == "hybrid":
+        result = _run_hybrid(WP, gains, hz, plant, force_task)
     elif controller in VELOCITY_CONTROLLERS:
         result = _run_velocity(WP, ref, T, controller, gains, hz)
     else:
@@ -589,6 +591,25 @@ def _run_admittance(WP, ref, T, gains, hz, disturbance):
 
 
 # ----------------------------------------------------------------------
+#  컴플라이언트 평면 벽 (힘·하이브리드 제어 공용 환경 모델)
+# ----------------------------------------------------------------------
+def _wall_contact(n, p_w, k_env, b_env):
+    """penalty 평면 벽 접촉 함수 factory. 반환 contact(th,dth) →
+    (f_meas 법선반력 N, δ 침투깊이 m, F_env 반력 3-vec base, +n 방향)."""
+    def contact(th, dth):
+        Tee = ur5.fk(th)
+        R, p = Tee[:3, :3], Tee[:3, 3]
+        delta = max(0.0, -float(n @ (p - p_w)))             # 평면 침투깊이(+면 비접촉)
+        if delta <= 0.0:
+            return 0.0, 0.0, np.zeros(3)
+        pdot = R @ (ur5.jacobian_body(th) @ dth)[3:6]       # base EE 선속도
+        ddelta = -float(n @ pdot)                           # 침투 속도
+        f_meas = max(0.0, k_env * delta + b_env * ddelta)   # 법선반력(벽은 밀기만)
+        return f_meas, delta, n * f_meas                    # 반력은 +n(로봇 밀어냄)
+    return contact
+
+
+# ----------------------------------------------------------------------
 #  토크 plant — 힘 제어 (MR §11.5, 식 11.51/11.54)
 # ----------------------------------------------------------------------
 def _run_force(WP, gains, hz, plant, force_task):
@@ -618,18 +639,7 @@ def _run_force(WP, gains, hz, plant, force_task):
     Kdamp = float(gains.get("kdamp", 25.0))
     plant = plant or MODEL
     Mp, Gp, Sp = df.stack_model(*plant)
-
-    def contact(th, dth):
-        """벽 접촉 상태 → (f_meas 법선반력 N, δ 침투깊이 m, F_env_base 3-force)."""
-        Tee = ur5.fk(th)
-        R, p = Tee[:3, :3], Tee[:3, 3]
-        delta = max(0.0, -float(n @ (p - p_w)))             # 평면 침투깊이(+면 비접촉)
-        if delta <= 0.0:
-            return 0.0, 0.0, np.zeros(3)
-        pdot = R @ (ur5.jacobian_body(th) @ dth)[3:6]       # base EE 선속도
-        ddelta = -float(n @ pdot)                           # 침투 속도
-        f_meas = max(0.0, k_env * delta + b_env * ddelta)   # 법선반력(벽은 밀기만)
-        return f_meas, delta, n * f_meas                    # 반력은 +n(로봇 밀어냄)
+    contact = _wall_contact(n, p_w, k_env, b_env)
 
     def rhs(t, x):
         th, dth, Ie = x[:N], x[N:2 * N], x[2 * N]
@@ -690,5 +700,144 @@ def _run_force(WP, gains, hz, plant, force_task):
         "waypoints_tcp": [ur5.fk(w)[:3, 3].tolist() for w in WP],
         "settle_time": settle_time,
         "steady_state_error": steady_state_error,
+        "diverged": bool(diverged),
+    }
+
+
+# ----------------------------------------------------------------------
+#  토크 plant — 하이브리드 모션/힘 제어 (MR §11.6, 식 11.60/11.61)
+# ----------------------------------------------------------------------
+def _run_hybrid(WP, gains, hz, plant, force_task):
+    """하이브리드 모션/힘: 법선=힘 제어, 접선=위치 제어를 동시에 (칠판 예).
+
+    투영행렬로 렌치공간을 두 직교 부분공간으로 분리한다 (모두 body 프레임 {b}):
+        P = I − Aᵀ(AΛ⁻¹Aᵀ)⁻¹AΛ⁻¹            (식 11.60),  Λ⁻¹ = Jb·M⁻¹·Jbᵀ
+        τ = Jbᵀ[ P·(Λ·a_motion) + (I−P)·F_force ] + c + g     (식 11.61)
+    A = [0 0 0 | nb] (1×6): 법선 방향 운동 구속(nb·v_b=0) → P 가 그 방향을 모션에서
+    제거하고 (I−P) 가 힘 제어로 넘긴다. 접선·자세는 모션 PD 가 추종.
+
+    a_motion = Kp·Xe + Kd·Ve  (task PD, Xe=log(X⁻¹X_d) body twist 오차)
+    F_force  = −nb·(fd + Kfp·fe + Kfi∫fe) − Kfd·(nb·v_b)·nb  (PI 힘 + 법선 감쇠)
+    (모션 Kd 는 접선만 감쇠하므로, 컴플라이언트 벽의 법선 진동은 Kfd 로 따로 잡는다.)
+
+    force_task 는 _run_force 와 동일 + 접선 모션: tangent(접선 방향,base),
+    move_len(접선 이동거리 m), move_start/move_time(s).  gains: {kp,kd,kfp,kfi,kfd}.
+    """
+    ft = force_task or {}
+    n = np.asarray(ft.get("normal", [0.0, 0.0, 1.0]), float)
+    n = n / np.linalg.norm(n)
+    p_w = np.asarray(ft.get("point", [0.0, 0.0, 0.0]), float)
+    fd = float(ft.get("fd", 20.0))
+    k_env = float(ft.get("k_env", 4000.0))
+    b_env = float(ft.get("b_env", 40.0))
+    t_end = float(ft.get("t_end", 4.0))
+    t_hat = np.asarray(ft.get("tangent", [1.0, 0.0, 0.0]), float)
+    t_hat = t_hat / np.linalg.norm(t_hat)        # 접선 이동 방향(base)
+    move_len = float(ft.get("move_len", 0.10))   # 접선 이동거리 m
+    move_start = float(ft.get("move_start", 0.8))
+    move_time = float(ft.get("move_time", 1.5))
+    Kp = float(gains.get("kp", 100.0))           # 모션 PID (task accel 게인)
+    Kd = float(gains.get("kd", 20.0))
+    Kiv = float(gains.get("kiv", 60.0))          # 모션 적분(식 11.61 의 Ki∫Xe)
+    Kfp = float(gains.get("kfp", 0.5))           # 힘 PI
+    Kfi = float(gains.get("kfi", 4.0))
+    Kfd = float(gains.get("kfd", 10.0))          # 법선 속도 감쇠
+    plant = plant or MODEL
+    Mp, Gp, Sp = df.stack_model(*plant)
+    contact = _wall_contact(n, p_w, k_env, b_env)
+
+    R0 = ur5.fk(WP[0])[:3, :3]                    # 자세는 시작값 유지
+    p0 = ur5.fk(WP[0])[:3, 3]
+    # 모션 목표는 벽면 위에 둔다(법선 성분 = 벽). 그래야 법선 위치오차가 모션
+    # 제어기로 안 새고(법선은 힘 제어 담당), 접선 추종이 깨끗하다 (교재 가정 A·Vd=0).
+    p_anchor = p0 - n * float(n @ (p0 - p_w))
+
+    def motion_des(t):
+        """접선 직선 목표 → (X_d 4x4, V_d body twist of {d})."""
+        if t < move_start:
+            s, sd = 0.0, 0.0
+        elif t < move_start + move_time:
+            s, sd, _ = quintic_time_scaling(t - move_start, move_time)
+        else:
+            s, sd = 1.0, 0.0
+        p_d = p_anchor + t_hat * (move_len * s)
+        X_d = np.eye(4)
+        X_d[:3, :3] = R0
+        X_d[:3, 3] = p_d
+        Vd = np.concatenate([np.zeros(3), R0.T @ (t_hat * move_len * sd)])
+        return X_d, Vd
+
+    def rhs(t, x):
+        th, dth, Ie = x[:N], x[N:2 * N], x[2 * N]
+        Iv = x[2 * N + 1:2 * N + 7]               # 모션 적분(body twist 오차 누적)
+        X = ur5.fk(th)
+        R = X[:3, :3]
+        Jb = ur5.jacobian_body(th)
+        Vb = Jb @ dth
+        M = df.mass_matrix(th, Mp, Gp, Sp)
+        Linv = Jb @ np.linalg.solve(M, Jb.T)         # Λ⁻¹ = Jb M⁻¹ Jbᵀ
+        nb = R.T @ n                                 # body 프레임 법선(단위)
+
+        # 투영행렬 P (식 11.60): A=[0 0 0 | nb] 법선 운동 구속
+        A = np.concatenate([np.zeros(3), nb])[None, :]   # 1×6
+        s = float((A @ Linv @ A.T)[0, 0])            # 스칼라(k=1)
+        P = np.eye(6) - (A.T @ A @ Linv) / s         # I − Aᵀ(AΛ⁻¹Aᵀ)⁻¹AΛ⁻¹
+
+        # 모션 부분공간: task PD → 렌치 Λ·a_motion
+        X_d, Vd = motion_des(t)
+        Tdiff = np.linalg.inv(X) @ X_d
+        Xe = SE3.log(Tdiff)[0]                        # body twist 오차
+        Ve = SE3.Adjoint(Tdiff) @ Vd - Vb
+        a_motion = Kp * Xe + Kiv * Iv + Kd * Ve
+        Lam = np.linalg.inv(Linv)
+        W_motion = Lam @ a_motion
+
+        # 힘 부분공간: PI 힘 + 법선 감쇠 (누름 = −nb)
+        f_meas, delta, F_env = contact(th, dth)
+        fe = fd - f_meas
+        vn = float(nb @ Vb[3:6])                      # 법선 속도(body)
+        W_force = -nb * (fd + Kfp * fe + Kfi * Ie) - Kfd * vn * nb
+        W_force = np.concatenate([np.zeros(3), W_force])
+
+        c = df.coriolis_forces(th, dth, Mp, Gp, Sp)
+        g = df.gravity_forces(th, ur5.GRAVITY, Mp, Gp, Sp)
+        tau = Jb.T @ (P @ W_motion + (np.eye(6) - P) @ W_force) + c + g
+        Ftip_b = np.concatenate([np.zeros(3), R.T @ (-F_env)])   # MR 규약(−반력)
+        ddth = df.forward_dynamics(th, dth, tau, ur5.GRAVITY, Ftip_b, Mp, Gp, Sp)
+        dIe = fe if delta > 0.0 else 0.0
+        return np.concatenate([dth, ddth, [dIe], Xe])     # İv = Xe(모션 적분)
+
+    x0 = np.concatenate([WP[0], np.zeros(N), [0.0], np.zeros(6)])
+    t_eval = np.linspace(0, t_end, int(t_end * hz) + 1)
+    sol = solve_ivp(rhs, (0, t_end), x0, t_eval=t_eval, method="Radau",
+                    rtol=1e-4, atol=1e-7, events=_blowup_event())
+
+    TH, DTH = sol.y[:N].T, sol.y[N:2 * N].T
+    fmeas, ferr, tan_pos, tan_des = [], [], [], []
+    for i in range(len(sol.t)):
+        fm, _, _ = contact(TH[i], DTH[i])
+        fmeas.append(fm)
+        ferr.append(abs(fd - fm))
+        p = ur5.fk(TH[i])[:3, 3]
+        tan_pos.append(float(t_hat @ (p - p0)))      # 실제 접선 변위
+        X_d, _ = motion_des(sol.t[i])
+        tan_des.append(float(t_hat @ (X_d[:3, 3] - p0)))   # 목표 접선 변위
+    fmeas = np.array(fmeas)
+    diverged = sol.status != 0
+
+    return {
+        "t": sol.t.tolist(),
+        "theta": TH.tolist(),
+        "tcp": [ur5.fk(TH[i])[:3, 3].tolist() for i in range(len(sol.t))],
+        "error": ferr,                             # 힘 오차(N)
+        "torque": [],
+        "qdot": [],
+        "force": fmeas.tolist(),                   # 측정 법선반력(N)
+        "force_des": fd,
+        "tan_pos": tan_pos,                        # 실제 접선 변위(m)
+        "tan_des": tan_des,                        # 목표 접선 변위(m)
+        "waypoints_tcp": [ur5.fk(w)[:3, 3].tolist() for w in WP],
+        "settle_time": None,
+        "steady_state_error": None,
         "diverged": bool(diverged),
     }
