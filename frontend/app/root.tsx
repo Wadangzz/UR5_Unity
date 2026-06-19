@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
 import {
   OrbitControls,
@@ -187,6 +188,12 @@ export default function App() {
         <p className='text-muted-foreground text-sm'>
           react-three-fiber · urdf-loader · FastAPI
         </p>
+        <Link
+          to='/slides'
+          className='text-primary pointer-events-auto mt-1 inline-block text-sm hover:underline'
+        >
+          📊 발표자료 →
+        </Link>
       </header>
 
       <div className='absolute top-4 right-4 z-10'>
