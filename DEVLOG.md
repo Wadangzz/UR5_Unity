@@ -272,7 +272,13 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
   +(하이브리드)접선 추종** 패널로 전환. **`WallPlane`**(신규): 응답 wall 로 3D 반투명 평면 렌더
   (법선→quaternion). 힘/하이브리드는 **현재 자세에서 출발**(run 분기).
 - **검증**: tsc/eslint 0, `pnpm build` OK. TestClient `POST /api/run`(hybrid, 중첩 force_task)
-  → 200, F_ss=목표·접선 추종·wall 계산 정상. (라이브 브라우저 스크린샷은 미실시 — 정적 검증만)
+  → 200, F_ss=목표·접선 추종·wall 계산 정상. **라이브 브라우저 확인 완료**(힘 40N 수렴 OK).
+- **사용성 보완(피드백 반영):**
+  · 벽을 base 고정([0,0,1])이 아니라 **시작자세 EE 도구축(보는 방향)** 에 배치 — `tool_axis`/
+    `tan_axis`(EE 로컬) → 컨트롤러가 `R0` 로 base normal/tangent 계산. READY 는 도구 z=아래라
+    기존과 동일, EE 를 돌리면 벽이 그 방향으로 따라옴(실제 누름 직관과 일치).
+  · Run 버튼 라벨 제어기별 분기(`현재자세에서 벽 누름`/`벽 누르며 선 긋기`) — 힘 제어가 티칭이
+    아님을 명확히.
 
 ### ✅ 오늘 커밋 (branch)
 - `test:` RNE 동치성(pytest 도입) + 노이즈 seed 매 실행 변동

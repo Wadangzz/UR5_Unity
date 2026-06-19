@@ -47,8 +47,11 @@ class ForceTask(SQLModel):
     gap: float = 0.05                            # 시작 시 벽까지 거리(m)
     k_env: float = 4000.0                        # 벽 강성(N/m)
     b_env: float = 40.0                          # 벽 감쇠(N·s/m)
-    normal: list[float] = [0.0, 0.0, 1.0]        # 벽 외향 법선(base)
-    tangent: list[float] = [1.0, 0.0, 0.0]       # 접선 이동 방향(base, hybrid)
+    # 누르는 방향은 EE 도구축(시작자세 기준)으로 잡는다 — 엔드이펙터가 보는 쪽으로 누름.
+    tool_axis: list[float] = [0.0, 0.0, 1.0]     # 누름 도구축(EE 로컬, 보는 방향)
+    tan_axis: list[float] = [1.0, 0.0, 0.0]      # 접선 도구축(EE 로컬, hybrid 선긋기)
+    normal: list[float] = [0.0, 0.0, 1.0]        # 벽 외향 법선(base) — 백엔드가 계산해 채움
+    tangent: list[float] = [1.0, 0.0, 0.0]       # 접선 방향(base) — 백엔드가 계산해 채움
     move_len: float = 0.10                       # 접선 이동거리(m, hybrid)
     move_start: float = 0.8                      # 접선 이동 시작(s, hybrid)
     move_time: float = 1.5                       # 접선 이동 소요(s, hybrid)

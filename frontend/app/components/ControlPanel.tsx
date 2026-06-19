@@ -539,7 +539,13 @@ export default function ControlPanel({
             onClick={onRun}
             disabled={running}
           >
-            {running ? '재생 중…' : 'Run ▶  ready → 현재자세'}
+            {running
+              ? '재생 중…'
+              : controller === 'hybrid'
+                ? 'Run ▶  벽 누르며 선 긋기'
+                : controller === 'force'
+                  ? 'Run ▶  현재자세에서 벽 누름'
+                  : 'Run ▶  ready → 현재자세'}
           </Button>
           <div className='flex gap-2'>
             <Button

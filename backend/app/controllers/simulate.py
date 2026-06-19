@@ -30,16 +30,19 @@ def run(req: RunRequest, session: Session):
     else:
         raise HTTPException(400, "program_id 또는 waypoints 중 하나는 필요합니다")
 
-    # 힘/하이브리드 제어: 벽 평면을 시작자세 EE 기준으로 배치(프론트는 fd/gap 만 보냄).
-    # point = 시작 EE − gap·법선 (접근방향 −법선 으로 gap 만큼 떨어진 벽면).
+    # 힘/하이브리드 제어: 벽을 시작자세 EE 가 '보는 방향'(도구축)에 배치한다.
+    # push = R0·tool_axis (base 에서 EE 가 누르는 방향) → 벽 법선 = −push,
+    # 벽면 point = 시작 EE + push·gap (도구가 보는 쪽으로 gap 만큼 앞).
     force_task = None
     if req.controller in ("force", "hybrid"):
         ft = (req.force_task or ForceTask()).model_dump()
-        normal = np.array(ft["normal"], float)
-        normal = normal / np.linalg.norm(normal)
-        p_start = ur5.fk(np.array(waypoints[0]))[:3, 3]
-        ft["normal"] = normal.tolist()
-        ft["point"] = (p_start - normal * ft["gap"]).tolist()
+        T0 = ur5.fk(np.array(waypoints[0]))
+        R0, p_start = T0[:3, :3], T0[:3, 3]
+        push = R0 @ np.array(ft["tool_axis"], float)
+        push = push / np.linalg.norm(push)
+        ft["normal"] = (-push).tolist()                          # 벽 외향(로봇 쪽)
+        ft["tangent"] = (R0 @ np.array(ft["tan_axis"], float)).tolist()
+        ft["point"] = (p_start + push * ft["gap"]).tolist()
         force_task = ft
 
     plant, ctrl = realism.build_models(req.payload, req.model_scale)
