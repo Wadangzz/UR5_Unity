@@ -209,6 +209,27 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 
 ---
 
+## 2026-06-19
+
+### 🎯 오늘 한 것 — 리뷰 후속(머지 준비) (branch `numba-dynamics`)
+
+`numba-dynamics` 브랜치 리뷰에서 나온 두 항목을 개선(머지 전 정지).
+
+- **RNE drift 방지 — pytest 도입**: numpy `Dynamics` ↔ numba `dynamics_fast` 두 RNE 가
+  같은 알고리즘을 각자 보유 → 한쪽만 고치면 조용히 어긋남. `tests/test_dynamics_parity.py`
+  로 5함수(inverse/forward dynamics·mass_matrix·gravity/coriolis) + ready·home 자세를
+  200개 랜덤 상태로 비교(`max|diff| < 1e-10`) 박제. **7 passed**. `pyproject` dev 에
+  `pytest` 추가(설정만 있고 미설치였던 것 채움).
+- **센서 노이즈 seed 노출 + 매 실행 변동**: `_zoh` 의 하드코딩 `default_rng(0)` →
+  `RunRequest.noise_seed`(controller→sim 배선). 프론트는 **Run 때마다 seed 자동 +1**
+  (실제 센서처럼 매 실행 다른 realization). seed 가 명시 정수라 추후 '고정/재현' 토글 가능.
+- 검증: pytest 7 passed, seed 같으면 재현·다르면 다른 패턴 확인, tsc/eslint 0, ruff(신규파일) clean.
+
+### ✅ 오늘 커밋 (branch)
+- (이 커밋) `test:` RNE 동치성(pytest 도입) + 노이즈 seed 매 실행 변동
+
+---
+
 ## 📋 다음 할 것 (TODO)
 
 - [ ] **멀티로봇** — ⭐엔진 이미 generic(동역학 Mlist/Glist/Slist 인자, numba n-무관) → 알고리즘 0.
@@ -226,7 +247,7 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
       제어율 낮추면 불안정 재현, 노이즈 chatter. numba 덕에 1kHz ~4s 현실화.
 - [ ] **힘제어**(hybrid position/force §11.6) — 제어측(렌치 `τ=Jᵀ·F`·Ftip 배선·빠른동역학) 준비됨.
       **접촉/환경 모델**(가상 표면→Ftip)만 지으면 가능 + 하이브리드 투영 P(식 11.61)
-- [ ] **`numba-dynamics` 브랜치 → develop 머지** (검증 끝나면)
+- [ ] **`numba-dynamics` 브랜치 → develop 머지** (parity pytest 통과 + 노이즈 seed 정리 완료 → 머지 가능)
 - [ ] (선택) fd 추가 최적화: 해석적 SE(3) 역행렬 → 이산 더 빠르게(2kHz 기본 가능)
 - [ ] **redundancy/널공간** 제어(7-DOF, `(I−J†J)θ̇₀`) — 멀티로봇 후
 - [ ] **Docker** 배포 + README 재작성(웹 기준)

@@ -36,6 +36,7 @@ export default function App() {
   const [tauMax, setTauMax] = useState(0); // 토크 한계(N·m, 0=무제한)
   const [controlRate, setControlRate] = useState(0); // 0=연속, >0=이산 ZOH(Hz)
   const [noise, setNoise] = useState(0); // 센서 노이즈 std(rad)
+  const [noiseSeed, setNoiseSeed] = useState(0); // 노이즈 realization seed
   const [push, setPush] = useState<number[]>([0, 0, 0]); // 외란 외력(N, base XYZ)
   const setPushAxis = (index: number, value: number) =>
     setPush((prev) => prev.map((p, i) => (i === index ? value : p)));
@@ -130,6 +131,9 @@ export default function App() {
   const runReq = async (req: Partial<RunRequest>) => {
     if (running || meta.length === 0) return;
     setRunning(true);
+    // 실제 센서처럼 매 실행마다 다른 노이즈 realization (seed 자동 증가)
+    const seed = noiseSeed + 1;
+    setNoiseSeed(seed);
     try {
       const res = await runSimulation({
         controller,
@@ -142,6 +146,7 @@ export default function App() {
         tau_max: tauMax,
         control_rate: controlRate,
         noise,
+        noise_seed: seed,
         ...req,
       });
       setResult(res);
@@ -201,6 +206,7 @@ export default function App() {
           }}
           noise={noise}
           onNoiseChange={setNoise}
+          noiseSeed={noiseSeed}
           push={push}
           onPushAxisChange={setPushAxis}
           onRun={run}

@@ -42,6 +42,7 @@ interface Props {
   onControlRateChange: (value: number) => void;
   noise: number;
   onNoiseChange: (value: number) => void;
+  noiseSeed: number;
   push: number[];
   onPushAxisChange: (index: number, value: number) => void;
   onRun: () => void;
@@ -115,6 +116,7 @@ export default function ControlPanel({
   onControlRateChange,
   noise,
   onNoiseChange,
+  noiseSeed,
   push,
   onPushAxisChange,
   onRun,
@@ -422,6 +424,12 @@ export default function ControlPanel({
                 disabled={running || controlRate === 0}
                 onValueChange={([v]) => onNoiseChange(v)}
               />
+              {/* 노이즈 realization 은 매 Run 마다 자동으로 달라짐(실제 센서처럼) */}
+              {controlRate > 0 && noise > 0 && (
+                <p className='text-muted-foreground text-[11px]'>
+                  실행마다 다른 노이즈 패턴 (seed #{noiseSeed})
+                </p>
+              )}
             </div>
           </div>
 

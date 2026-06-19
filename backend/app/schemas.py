@@ -57,6 +57,7 @@ class RunRequest(SQLModel):
     tau_max: float = 0.0                         # 액추에이터 토크 한계(N·m, 0=무제한)
     control_rate: float = 0.0                    # 0=연속(이상) / >0=이산 ZOH 제어율(Hz)
     noise: float = 0.0                           # 센서 측정 노이즈 std(rad) — 토크 제어만
+    noise_seed: int = 0                          # 노이즈 realization seed(고정=재현성)
 
 
 class RunResponse(SQLModel):

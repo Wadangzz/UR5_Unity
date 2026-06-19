@@ -43,7 +43,8 @@ def warmup():
 def run_simulation(waypoints, controller="computed_torque", gains=None,
                    gravity_comp=True, t_seg=1.2, hold=0.6, hz=30,
                    plant=None, ctrl=None, disturbance=None, traj_mode="joint",
-                   friction=0.0, tau_max=0.0, control_rate=0.0, noise=0.0):
+                   friction=0.0, tau_max=0.0, control_rate=0.0, noise=0.0,
+                   noise_seed=0):
     """관절 경유점(rad)을 제어기로 순회. → {t, theta, tcp, error, torque, qdot, ...}.
 
     궤적생성(traj_mode)과 제어기는 직교(독립):
@@ -68,7 +69,7 @@ def run_simulation(waypoints, controller="computed_torque", gains=None,
     else:
         result = _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
                              plant, ctrl, disturbance, friction, tau_max,
-                             control_rate, noise)
+                             control_rate, noise, noise_seed)
     result["traj_error"] = traj_error
     return result
 
@@ -240,7 +241,7 @@ def _keep_idx(sol, settle_time, diverged, T):
 # ----------------------------------------------------------------------
 def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
                 plant, ctrl, disturbance, friction=0.0, tau_max=0.0,
-                control_rate=0.0, noise=0.0):
+                control_rate=0.0, noise=0.0, noise_seed=0):
     Kp = float(gains.get("kp", 100.0))
     Kd = float(gains.get("kd", 20.0))
     Ki = float(gains.get("ki", 0.0))
@@ -325,7 +326,7 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
         n_ticks = int(T_cap * rate) + 1
         out_every = max(1, round(rate / hz))
         if noise > 0:
-            rng = np.random.default_rng(0)          # 결정적 노이즈 realization
+            rng = np.random.default_rng(noise_seed)  # seed 고정 = 재현성(같은 realization)
             n_pos = noise * rng.standard_normal((n_ticks, N))
             n_vel = 5.0 * noise * rng.standard_normal((n_ticks, N))
         th, dth, I = WP[0].copy(), np.zeros(N), np.zeros(N)

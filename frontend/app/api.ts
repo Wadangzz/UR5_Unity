@@ -112,6 +112,7 @@ export interface RunRequest {
   tau_max?: number; // 액추에이터 토크 한계(N·m, 0=무제한) — 토크 제어만
   control_rate?: number; // 0=연속(이상) / >0=이산 ZOH 제어율(Hz) — 토크 제어
   noise?: number; // 센서 측정 노이즈 std(rad), 이산 ZOH — 토크 제어
+  noise_seed?: number; // 노이즈 realization seed(고정=재현성, 바꾸면 다른 패턴)
 }
 
 export interface RunResponse {
