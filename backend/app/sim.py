@@ -687,6 +687,19 @@ def _surface_contact(surf, k_env, b_env, robot):
     return contact
 
 
+def _align_rot(a, b):
+    """단위벡터 a 를 b 로 보내는 최소회전 행렬 (Rodrigues). a≈b 면 단위행렬.
+    Level 2 컨투어: 공구 z축(시작 누름방향)을 접촉점 법선에 정렬하는 데 쓴다."""
+    a = a / np.linalg.norm(a)
+    b = b / np.linalg.norm(b)
+    v = np.cross(a, b)
+    s = float(np.linalg.norm(v))
+    if s < 1e-9:                                  # 평행(정상) — 회전 없음
+        return np.eye(3)
+    c = float(np.clip(a @ b, -1.0, 1.0))
+    return SO3.exp(v / s * np.arccos(c))
+
+
 # ----------------------------------------------------------------------
 #  토크 plant — 힘 제어 (MR §11.5, 식 11.51/11.54)
 # ----------------------------------------------------------------------
@@ -799,8 +812,12 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
     F_force  = −nb·(fd + Kfp·fe + Kfi∫fe) − Kfd·(nb·v_b)·nb  (PI 힘 + 법선 감쇠)
     (모션 Kd 는 접선만 감쇠하므로, 컴플라이언트 벽의 법선 진동은 Kfd 로 따로 잡는다.)
 
-    force_task 는 _run_force 와 동일 + 접선 모션: tangent(접선 방향,base),
-    move_len(접선 이동거리 m), move_start/move_time(s).  gains: {kp,kd,kfp,kfi,kfd}.
+    곡면 컨투어(shape: plane|cylinder|sphere): 구속 A(θ)가 위치종속이라 곡면은 접촉점
+    법선 nb=Rᵀ·n(p)만 매 스텝 달라질 뿐 식은 동일. 티칭 waypoint(distinct≥2)면 표면에
+    투영한 경로를 §9 quintic 으로 접선 추종, 1점이면 직선 한 획(move_len, 하위호환).
+    공구 자세는 누름축(z)을 −n(p) 에 정렬(Level 2, 평면이면 자동 고정).
+    force_task: shape·center·radius·axis(곡면) | normal·point(평면), fd·k_env·b_env·
+    move_start·move_time.  gains: {kp,kd,kiv,kfp,kfi,kfd}.
     """
     ft = force_task or {}
     fd = float(ft.get("fd", 20.0))
@@ -823,8 +840,9 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
     surf = _make_surface(ft)                      # plane | cylinder | sphere
     contact = _surface_contact(surf, k_env, b_env, robot)
 
-    R0 = robot.fk(WP[0])[:3, :3]                  # 자세 고정(Level 1)
+    R0 = robot.fk(WP[0])[:3, :3]                  # 시작 자세
     p0 = robot.fk(WP[0])[:3, 3]
+    tool_z0 = -surf(p0)[0]                         # 시작 누름방향(= −n(p0), 공구 z 기준)
     # 모션 경로: 티칭 waypoint(>1)면 표면에 투영한 경로를 접선 추종(컨투어), 1점이면
     # 접선 직선 한 획(move_len, 하위호환). 목표를 표면에 투영해 둬야 법선 위치오차가
     # 접선으로 새지 않는다 (교재 가정 A·Vd=0).
@@ -854,10 +872,12 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
         v_raw = sd * (path[k + 1] - path[k])
         n_loc, _, p_d = surf(p_raw)               # 표면 재투영 + 국소 법선
         v_tan = v_raw - float(n_loc @ v_raw) * n_loc
+        # Level 2: 공구 z축(누름방향)을 −n(p) 에 정렬 (평면이면 R_d=R0 자동, 곡면은 추종)
+        R_d = _align_rot(tool_z0, -n_loc) @ R0
         X_d = np.eye(4)
-        X_d[:3, :3] = R0
+        X_d[:3, :3] = R_d
         X_d[:3, 3] = p_d
-        Vd = np.concatenate([np.zeros(3), R0.T @ v_tan])
+        Vd = np.concatenate([np.zeros(3), R_d.T @ v_tan])
         return X_d, Vd
 
     def rhs(t, x):
