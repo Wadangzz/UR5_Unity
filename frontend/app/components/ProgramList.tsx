@@ -10,50 +10,60 @@ import {
   type Pose,
 } from '@/api';
 
-const PID = 'default';
-
 interface Props {
+  robotId: string; // 티치 FK 대상 + 프로그램 식별(로봇마다 독립 프로그램)
   joints: number[];
   onRunProgram: (programId: string) => void;
   running: boolean;
 }
 
 /** 포즈 티치(현재자세 저장) → 목록 → 프로그램 실행(home→순회) → 초기화. */
-export default function ProgramList({ joints, onRunProgram, running }: Props) {
+export default function ProgramList({
+  robotId,
+  joints,
+  onRunProgram,
+  running,
+}: Props) {
   const [poses, setPoses] = useState<Pose[]>([]);
   const [busy, setBusy] = useState(false);
 
+  // 프로그램은 로봇별로 독립 (program_id = robotId) → 로봇 바꾸면 그 로봇 프로그램만.
   const refresh = () =>
-    getProgram(PID)
+    getProgram(robotId)
       .then(setPoses)
       .catch(() => {});
   useEffect(() => {
     refresh();
-  }, []);
+  }, [robotId]);
 
   const save = async () => {
     setBusy(true);
     try {
-      const r = await fk(joints); // Cartesian(표시·이식) + 현재 관절각(정확 재현)
-      await savePose(PID, r.pose, joints);
+      const r = await fk(joints, robotId); // Cartesian(표시·이식) + 현재 관절각(정확 재현)
+      await savePose(robotId, r.pose, joints);
       await refresh();
     } finally {
       setBusy(false);
     }
   };
   const clear = async () => {
-    await resetProgram(PID);
+    await resetProgram(robotId);
     await refresh();
   };
   const del = async (poseId: number) => {
-    await deletePose(PID, poseId);
+    await deletePose(robotId, poseId);
     await refresh();
   };
 
   return (
     <Card className='bg-card/95 supports-[backdrop-filter]:bg-card/80 w-60 backdrop-blur'>
       <CardHeader className='pb-3'>
-        <CardTitle className='text-sm'>프로그램 (Teaching)</CardTitle>
+        <CardTitle className='text-sm'>
+          프로그램 (Teaching)
+          <span className='text-muted-foreground ml-1 font-normal'>
+            · {robotId}
+          </span>
+        </CardTitle>
       </CardHeader>
       <CardContent className='space-y-3'>
         <ol className='max-h-32 space-y-1 overflow-y-auto text-xs'>
@@ -93,7 +103,7 @@ export default function ProgramList({ joints, onRunProgram, running }: Props) {
         <Button
           size='sm'
           className='w-full'
-          onClick={() => onRunProgram(PID)}
+          onClick={() => onRunProgram(robotId)}
           disabled={running || poses.length === 0}
         >
           프로그램 실행

@@ -3,13 +3,22 @@ import axios from 'axios';
 
 const http = axios.create({ baseURL: '/api' });
 
-export interface RobotInfo {
+// 멀티로봇: 목록(로드 없이 메타) + 상세(렌더용 urdf_url·packages 포함)
+export interface RobotSummary {
+  id: string;
+  name: string;
+  dof: number;
+}
+
+export interface RobotDetail {
+  id: string;
   name: string;
   n: number;
   joint_names: string[];
-  home: number[];
-  home_tcp: number[];
+  joint_limits: number[][] | null;
   ready: number[]; // 비특이 운용 출발 자세
+  home_tcp: number[];
+  ready_tcp: number[];
   urdf_url: string;
   packages: Record<string, string>;
 }
@@ -151,6 +160,7 @@ export interface ForceTask {
 }
 
 export interface RunRequest {
+  robot_id?: string; // 대상 로봇 (레지스트리 id). 미지정 시 백엔드 ur5
   waypoints?: number[][]; // 관절 경유점(rad)
   program_id?: string;
   start?: number[]; // 프로그램 실행 출발 관절각(현재 자세)
@@ -225,14 +235,24 @@ export interface Pose {
   theta: number[];
 }
 
-export const getRobot = () => http.get<RobotInfo>('/robot').then((r) => r.data);
+// 멀티로봇 목록/상세
+export const getRobots = () =>
+  http.get<RobotSummary[]>('/robots').then((r) => r.data);
+export const getRobotDetail = (id: string) =>
+  http.get<RobotDetail>(`/robots/${id}`).then((r) => r.data);
+
 export const runSimulation = (req: RunRequest) =>
   http.post<RunResponse>('/run', req).then((r) => r.data);
 
-export const fk = (theta: number[]) =>
-  http.post<FKResponse>('/fk', { theta }).then((r) => r.data);
-export const ik = (pose: number[], seed?: number[]) =>
-  http.post<IKResponse>('/ik', { pose, seed }).then((r) => r.data);
+// robotId 미지정 시 robot_id 생략 → 백엔드 기본 ur5 (하위호환)
+export const fk = (theta: number[], robotId?: string) =>
+  http
+    .post<FKResponse>('/fk', { theta, robot_id: robotId })
+    .then((r) => r.data);
+export const ik = (pose: number[], seed?: number[], robotId?: string) =>
+  http
+    .post<IKResponse>('/ik', { pose, seed, robot_id: robotId })
+    .then((r) => r.data);
 
 export const getProgram = (id: string) =>
   http.get<Pose[]>(`/programs/${id}`).then((r) => r.data);

@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { LoadingManager, Mesh, MeshPhongMaterial, type Object3D } from 'three';
 import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import URDFLoader from 'urdf-loader';
 import type { URDFRobot } from 'urdf-loader';
-import { getRobot, type JointMeta } from '@/api';
+import { getRobotDetail, type JointMeta } from '@/api';
 
 // urdf-loader 콜백: done(mesh, err) — 에러 시 mesh 자리는 무시되므로 null 을 캐스팅해 넘긴다.
 type MeshDone = (mesh: Object3D, err?: Error) => void;
@@ -14,7 +15,20 @@ const fail = (done: MeshDone, e: unknown) =>
     e instanceof Error ? e : new Error(String(e)),
   );
 
-// 확장자별 메시 로더 (UR5 visual = .dae / collision = .stl)
+// iiwa14(.obj)는 재질(.mtl)이 없고 색이 파일명에 인코딩돼 있다(drake 메시 컨벤션):
+// link_2_orange.obj / link_2_grey.obj … → 파일명 키워드로 KUKA 색을 입힌다.
+// 그 외 .obj 는 기본 회색. (현재 .obj 로봇은 iiwa14 뿐)
+function objColor(path: string): number {
+  const f = path.toLowerCase();
+  if (f.includes('orange')) return 0xe8730c; // KUKA 주황
+  if (f.includes('grey') || f.includes('gray')) return 0xd9dde1; // 밝은 회색
+  if (f.includes('link_0')) return 0x3f3f46; // 베이스(다크)
+  if (f.includes('band')) return 0xc8ccd0; // 실버 밴드
+  if (f.includes('kuka')) return 0x27272a; // 로고 플레이트(다크)
+  return 0xe8730c; // link_1/3/5/7 = 주황 단일 변형
+}
+
+// 확장자별 메시 로더 (ur5/panda visual=.dae·collision=.stl, iiwa14 visual=.obj)
 function loadMesh(path: string, manager: LoadingManager, done: MeshDone) {
   const ext = path.split('.').pop()?.toLowerCase();
   if (ext === 'dae') {
@@ -32,33 +46,51 @@ function loadMesh(path: string, manager: LoadingManager, done: MeshDone) {
       undefined,
       (e) => fail(done, e),
     );
+  } else if (ext === 'obj') {
+    new OBJLoader(manager).load(
+      path,
+      (obj) => {
+        // .obj 는 재질이 없으므로 파일명 기반 색을 phong 으로 입힌다
+        const color = objColor(path);
+        obj.traverse((c) => {
+          const m = c as Mesh;
+          if (m.isMesh) m.material = new MeshPhongMaterial({ color });
+        });
+        done(obj);
+      },
+      undefined,
+      (e) => fail(done, e),
+    );
   } else {
     fail(done, new Error(`unsupported mesh: ${ext}`));
   }
 }
 
 interface Props {
+  robotId: string; // 레지스트리 로봇 id (바뀌면 부모가 key 로 remount)
   joints: number[]; // 관절각(rad), joint_names 순서
   onLoaded: (meta: JointMeta[], ready: number[]) => void; // 관절 메타 + ready 자세 보고
 }
 
 /**
- * /api/robot 에서 urdf_url·packages 를 받아 urdf-loader 로 UR5 메시를 로드한다.
+ * /api/robots/{id} 에서 urdf_url·packages 를 받아 urdf-loader 로 메시를 로드한다.
  * - 씬을 Z-up(camera.up=+Z)으로 두므로 URDF(Z-up)를 회전 없이 그대로 쓴다
  *   → 월드축 = 로봇 베이스축 = PoseEditor 직교축 일치.
  * - joints prop 이 바뀌면 setJointValues 로 브라우저에서 즉시 FK (백엔드 왕복 0).
  */
-export default function RobotView({ joints, onLoaded }: Props) {
+export default function RobotView({ robotId, joints, onLoaded }: Props) {
   const [robot, setRobot] = useState<URDFRobot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const namesRef = useRef<string[]>([]);
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
 
-  // URDF 1회 로드
+  // robotId 별 URDF 로드 (바뀌면 이전 로봇 비우고 재로드)
   useEffect(() => {
     let disposed = false;
-    getRobot()
+    setRobot(null);
+    setError(null);
+    getRobotDetail(robotId)
       .then((info) => {
         const manager = new LoadingManager();
         const loader = new URDFLoader(manager);
@@ -88,7 +120,7 @@ export default function RobotView({ joints, onLoaded }: Props) {
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [robotId]);
 
   // joints 변경 시 URDF 에 적용
   useEffect(() => {

@@ -10,19 +10,32 @@ import {
 import RobotView from '@/components/RobotView';
 import WallPlane from '@/components/WallPlane';
 import ControlPanel from '@/components/ControlPanel';
+import JointPanel from '@/components/JointPanel';
 import PoseEditor from '@/components/PoseEditor';
 import ProgramList from '@/components/ProgramList';
 import Plots from '@/components/Plots';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   CONTROLLERS,
   POLE_PLACE,
+  getRobots,
   runSimulation,
   type JointMeta,
+  type RobotSummary,
   type RunRequest,
   type RunResponse,
 } from '@/api';
 
 export default function App() {
+  // 멀티로봇: 목록 + 선택. robotId 가 바뀌면 RobotView 를 key 로 remount → 재로드.
+  const [robots, setRobots] = useState<RobotSummary[]>([]);
+  const [robotId, setRobotId] = useState('ur5');
   const [meta, setMeta] = useState<JointMeta[]>([]);
   const [joints, setJoints] = useState<number[]>([]);
   const [ready, setReady] = useState<number[]>([]); // 비특이 운용 출발 자세
@@ -96,6 +109,22 @@ export default function App() {
     [],
   );
 
+  // 사용 가능한 로봇 목록 (로드 없이 메타만)
+  useEffect(() => {
+    getRobots()
+      .then(setRobots)
+      .catch(() => {});
+  }, []);
+
+  // 로봇 전환: 이전 결과/라이브 표시 비우고 robotId 변경(→ RobotView remount).
+  // 관절각은 RobotView 가 새 로봇 ready 를 onLoaded 로 보고하면 거기서 초기화된다.
+  const onRobotChange = (id: string) => {
+    if (id === robotId || running) return;
+    setRobotId(id);
+    setResult(null);
+    setLive(null);
+  };
+
   // URDF 로드 완료 → 관절 메타 저장 + 비특이 ready 자세로 초기화
   // (kinematic zero=전관절0 은 특이점이라 시작 자세로 부적절)
   const handleLoaded = useCallback((m: JointMeta[], r: number[]) => {
@@ -146,6 +175,7 @@ export default function App() {
     setNoiseSeed(seed);
     try {
       const res = await runSimulation({
+        robot_id: robotId,
         controller,
         gains,
         traj_mode: trajMode,
@@ -183,7 +213,7 @@ export default function App() {
     <div className='bg-background relative h-screen w-screen'>
       <header className='pointer-events-none absolute top-0 left-0 z-10 p-4'>
         <h1 className='text-foreground text-lg font-semibold tracking-tight'>
-          UR5 Web Simulator
+          Robot Web Simulator
         </h1>
         <p className='text-muted-foreground text-sm'>
           react-three-fiber · urdf-loader · FastAPI
@@ -196,11 +226,28 @@ export default function App() {
         </Link>
       </header>
 
+      {/* 로봇 선택 (멀티로봇) — 상단 중앙. 바꾸면 메시·기구학·동역학이 그 로봇으로 전환 */}
+      <div className='absolute top-4 left-1/2 z-20 -translate-x-1/2'>
+        <div className='bg-card/95 supports-[backdrop-filter]:bg-card/80 flex items-center gap-2 rounded-lg border px-3 py-1.5 shadow-sm backdrop-blur'>
+          <span className='text-muted-foreground text-xs font-medium'>로봇</span>
+          <Select value={robotId} onValueChange={onRobotChange} disabled={running}>
+            <SelectTrigger size='sm' className='w-44 border-0 bg-transparent'>
+              <SelectValue placeholder='로봇 선택' />
+            </SelectTrigger>
+            <SelectContent>
+              {robots.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.name} · {r.dof}-DOF
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div className='absolute top-4 right-4 z-10'>
         <ControlPanel
           meta={meta}
-          joints={joints}
-          onChange={setJoint}
           onReset={reset}
           onReady={() => setJoints(ready)}
           controllers={controllers}
@@ -239,14 +286,24 @@ export default function App() {
         />
       </div>
 
-      <div className='absolute top-20 left-4 z-10 space-y-3'>
-        <PoseEditor
-          joints={joints}
-          onSolved={setJoints}
-          running={running}
-          live={live}
-        />
+      <div className='absolute top-20 left-4 z-10 max-h-[calc(100vh-6rem)] space-y-3 overflow-y-auto pr-1'>
+        <div className='flex items-start gap-3'>
+          <PoseEditor
+            robotId={robotId}
+            joints={joints}
+            onSolved={setJoints}
+            running={running}
+            live={live}
+          />
+          <JointPanel
+            meta={meta}
+            joints={joints}
+            onChange={setJoint}
+            running={running}
+          />
+        </div>
         <ProgramList
+          robotId={robotId}
           joints={joints}
           onRunProgram={runProgram}
           running={running}
@@ -275,7 +332,12 @@ export default function App() {
         <directionalLight position={[0, 6, 2]} intensity={0.5} />
         <directionalLight position={[0, -5, -2]} intensity={0.4} />
 
-        <RobotView joints={joints} onLoaded={handleLoaded} />
+        <RobotView
+          key={robotId}
+          robotId={robotId}
+          joints={joints}
+          onLoaded={handleLoaded}
+        />
 
         {/* 힘/하이브리드 제어가 누르는 가상 벽 (마지막 Run 결과에 있을 때만) */}
         <WallPlane wall={result?.wall} />

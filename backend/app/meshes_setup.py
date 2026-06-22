@@ -1,8 +1,7 @@
-"""
-URDF + 메시 정적 서빙 준비.
+"""URDF + 메시 정적 서빙 준비 (멀티로봇).
 
-robot_descriptions 캐시(~/.cache/robot_descriptions/...)에 있는 UR5 URDF 와
-그것이 참조하는 visual/collision 메시(.dae/.stl)를 `app/meshes/` 아래로 복사한다.
+robot_descriptions 캐시(~/.cache/robot_descriptions/...)에 있는 각 로봇의 URDF 와 그것이
+참조하는 visual/collision 메시(.dae/.stl/.obj)를 `app/meshes/` 아래로 복사한다.
 package:// 상대 구조를 그대로 유지하므로 브라우저 urdf-loader 가 package 매핑만으로
 메시를 찾을 수 있다.
 
@@ -11,51 +10,33 @@ package:// 상대 구조를 그대로 유지하므로 브라우저 urdf-loader �
 
 → /meshes/example-robot-data/robots/ur_description/meshes/ur5/visual/base.dae
 
-`app/meshes/` 는 .gitignore 되며, 서버 기동 시(import 시) 없으면 자동 생성된다.
-Docker 에서도 robot_descriptions 가 첫 import 때 캐시를 내려받으므로 그대로 동작.
+세 로봇 모두 pkg_parent=dirname(REPOSITORY_PATH) 기준으로 메시가 해석된다
+(ur5/panda=example-robot-data·.dae, iiwa14=drake·.obj). 로봇별로 첫 요청 시 지연 준비(복사)
+하고 캐시한다. `app/meshes/` 는 .gitignore 되며, Docker 에서도 robot_descriptions 가
+첫 import 때 캐시를 내려받으므로 그대로 동작.
 """
 
+import importlib
 import os
 import re
 import shutil
 
 MESHES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meshes")
 
-# urdf-loader 에 넘길 package 매핑 (package 이름 → /meshes 하위 경로)
-PACKAGE_NAME = "example-robot-data"
+# robot_id → robot_descriptions 모듈 이름 (레지스트리와 동일 로봇 집합)
+_ROBOT_DESC = {
+    "ur5": "ur5_description",
+    "iiwa14": "iiwa14_description",
+    "panda": "panda_description",
+}
 
-# /meshes 기준 URDF 상대 경로 (prepare_meshes 가 채워줌)
-_URDF_REL = None
+# 레거시 /api/robot (UR5 단일) 호환용 package 이름
+PACKAGE_NAME = "example-robot-data"
 
 _MESH_RE = re.compile(r'package://([^/]+)/(.+?\.(?:dae|stl|obj|DAE|STL|OBJ))')
 
-
-def prepare_meshes():
-    """캐시의 UR5 URDF + 참조 메시를 app/meshes/ 로 복사. URDF 의 /meshes 상대경로 반환."""
-    global _URDF_REL
-    from robot_descriptions import ur5_description as desc
-
-    urdf_src = desc.URDF_PATH                       # .../example-robot-data/robots/ur_description/urdf/ur5_robot.urdf
-    repo_root = desc.REPOSITORY_PATH                # .../example-robot-data
-    pkg_parent = os.path.dirname(repo_root)         # .../robot_descriptions (PACKAGE_NAME 의 부모)
-
-    with open(urdf_src, "r", encoding="utf-8") as f:
-        urdf_text = f.read()
-
-    # URDF 자신 복사 (repo_root 부모 기준 상대경로 유지)
-    urdf_rel = os.path.relpath(urdf_src, pkg_parent).replace("\\", "/")
-    _copy(urdf_src, os.path.join(MESHES_DIR, urdf_rel))
-
-    # URDF 가 참조하는 모든 메시 복사
-    copied = 0
-    for pkg, rel in _MESH_RE.findall(urdf_text):
-        src = os.path.join(pkg_parent, pkg, *rel.split("/"))
-        if os.path.exists(src):
-            _copy(src, os.path.join(MESHES_DIR, pkg, *rel.split("/")))
-            copied += 1
-
-    _URDF_REL = urdf_rel
-    return urdf_rel, copied
+# robot_id → {"urdf_url", "packages"} (지연 준비·캐시)
+_ASSETS: dict[str, dict] = {}
 
 
 def _copy(src, dst):
@@ -65,8 +46,48 @@ def _copy(src, dst):
     shutil.copy2(src, dst)
 
 
+def _prepare(desc_modname):
+    """description 모듈의 URDF + 참조 메시를 app/meshes/ 로 복사. → (urdf_url, packages).
+
+    package 이름은 URDF 내 참조에서 모아 매핑(urdf-loader.packages)으로 만든다.
+    """
+    desc = importlib.import_module(f"robot_descriptions.{desc_modname}")
+    urdf_src = desc.URDF_PATH
+    pkg_parent = os.path.dirname(desc.REPOSITORY_PATH)   # package 이름의 부모 디렉터리
+
+    with open(urdf_src, encoding="utf-8") as f:
+        urdf_text = f.read()
+
+    # URDF 자신 복사 (pkg_parent 기준 상대경로 유지)
+    urdf_rel = os.path.relpath(urdf_src, pkg_parent).replace("\\", "/")
+    _copy(urdf_src, os.path.join(MESHES_DIR, *urdf_rel.split("/")))
+
+    # URDF 가 참조하는 모든 메시 복사 + package 이름 수집
+    pkgs = set()
+    for pkg, rel in _MESH_RE.findall(urdf_text):
+        src = os.path.join(pkg_parent, pkg, *rel.split("/"))
+        if os.path.exists(src):
+            _copy(src, os.path.join(MESHES_DIR, pkg, *rel.split("/")))
+            pkgs.add(pkg)
+
+    packages = {p: f"/meshes/{p}" for p in pkgs}
+    return "/meshes/" + urdf_rel, packages
+
+
+def robot_assets(robot_id):
+    """robot_id → {"urdf_url", "packages"} (지연 준비·캐시). 미등록이면 KeyError."""
+    if robot_id not in _ASSETS:
+        url, packages = _prepare(_ROBOT_DESC[robot_id])   # 미등록 → KeyError
+        _ASSETS[robot_id] = {"urdf_url": url, "packages": packages}
+    return _ASSETS[robot_id]
+
+
+def prepare_meshes():
+    """서버 부팅: MESHES_DIR 보장 + 기본 로봇(UR5) 준비(멱등)."""
+    os.makedirs(MESHES_DIR, exist_ok=True)
+    return robot_assets("ur5")
+
+
 def urdf_url():
-    """프론트가 로드할 URDF 의 정적 URL (/meshes/...)."""
-    if _URDF_REL is None:
-        prepare_meshes()
-    return "/meshes/" + _URDF_REL
+    """레거시 /api/robot 용 — 기본 로봇(UR5) URDF 의 정적 URL."""
+    return robot_assets("ur5")["urdf_url"]

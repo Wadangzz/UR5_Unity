@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { fk, ik } from '@/api';
 
 interface Props {
+  robotId: string; // IK/FK 대상 로봇
   joints: number[];
   onSolved: (theta: number[]) => void;
   running: boolean;
@@ -88,7 +89,13 @@ const fromPose7 = (pose: number[]): Pose6 => {
  * IK 를 effect 가 아니라 편집에서만 트리거 → running 변화로 stale 타깃이
  * 재적용되는 버그 없음. FK 동기화는 재생 중·IK 중·방금 편집(400ms) 중이면 건너뜀.
  */
-export default function PoseEditor({ joints, onSolved, running, live }: Props) {
+export default function PoseEditor({
+  robotId,
+  joints,
+  onSolved,
+  running,
+  live,
+}: Props) {
   const [pose, setPose] = useState<Pose6 | null>(null);
   const [status, setStatus] = useState('');
   const [sigma, setSigma] = useState<number | null>(null); // σ_min
@@ -109,7 +116,7 @@ export default function PoseEditor({ joints, onSolved, running, live }: Props) {
     latest.current = null;
     inFlight.current = true;
     try {
-      const r = await ik(target, jointsRef.current);
+      const r = await ik(target, jointsRef.current, robotId);
       if (r.converged) onSolvedRef.current(r.theta);
       setStatus(r.converged ? '도달 ✓' : '도달 불가 ✗');
     } catch {
@@ -129,7 +136,7 @@ export default function PoseEditor({ joints, onSolved, running, live }: Props) {
     fkInFlight.current = true;
     fkDirty.current = false;
     try {
-      const r = await fk(jointsRef.current);
+      const r = await fk(jointsRef.current, robotId);
       setSigma(r.sigma_min); // 현재 자세의 특이점 근접도 (항상 갱신)
       // 사용자가 편집 중이거나 IK 진행 중이면 표시 갱신 보류 (충돌 방지)
       if (!inFlight.current && Date.now() - editedAt.current > 300) {

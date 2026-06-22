@@ -14,8 +14,6 @@ import { POLE_PLACE, type ControllerSpec, type JointMeta } from '@/api';
 
 interface Props {
   meta: JointMeta[];
-  joints: number[];
-  onChange: (index: number, value: number) => void;
   onReset: () => void;
   onReady: () => void;
   controllers: ControllerSpec[];
@@ -50,8 +48,6 @@ interface Props {
   onRun: () => void;
   running: boolean;
 }
-
-const toDeg = (rad: number) => (rad * 180) / Math.PI;
 
 // 2차 PD 오차동역학 ë + Kd·ė + Kp·e = 0  →  ωn=√Kp, ζ=Kd/(2√Kp)
 // (CT 는 비선형 상쇄 후 정확, PD/PID 는 M(θ) 변동으로 근사)
@@ -91,8 +87,6 @@ function velDamping(kp?: number, ki?: number) {
 /** 관절 슬라이더 + 제어기/게인 튜닝 + Run 패널. */
 export default function ControlPanel({
   meta,
-  joints,
-  onChange,
   onReset,
   onReady,
   controllers,
@@ -136,29 +130,10 @@ export default function ControlPanel({
   return (
     <Card className='bg-card/95 supports-[backdrop-filter]:bg-card/80 w-72 backdrop-blur'>
       <CardHeader className='pb-3'>
-        <CardTitle className='text-sm'>관절 제어</CardTitle>
+        <CardTitle className='text-sm'>제어 · 시뮬레이션</CardTitle>
       </CardHeader>
       <CardContent className='space-y-4'>
-        {meta.map((m, i) => (
-          <div key={m.name} className='space-y-1.5'>
-            <div className='flex items-center justify-between'>
-              <Label className='text-muted-foreground text-xs'>{m.name}</Label>
-              <span className='text-xs tabular-nums'>
-                {toDeg(joints[i] ?? 0).toFixed(0)}°
-              </span>
-            </div>
-            <Slider
-              min={m.lower}
-              max={m.upper}
-              step={0.01}
-              value={[joints[i] ?? 0]}
-              disabled={running}
-              onValueChange={([v]) => onChange(i, v)}
-            />
-          </div>
-        ))}
-
-        <div className='space-y-3 border-t pt-3'>
+        <div className='space-y-3'>
           <div className='space-y-1.5'>
             <Label className='text-muted-foreground text-xs'>제어기</Label>
             <Select

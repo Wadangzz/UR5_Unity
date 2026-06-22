@@ -341,6 +341,30 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 - 남은 것: **프론트 로봇 셀렉터 + 로봇별 메시 서빙**(현재 프론트는 robot_id 미전송 → ur5 동작),
   이후 URDF 업로드 · 7-DOF 널공간 제어.
 
+### 🤖 멀티로봇 Phase 5 — 프론트 셀렉터 + 로봇별 메시 (branch `multirobot`)
+
+백엔드는 `robot_id` 로 일반화됐고(Phase 4), 프론트가 그걸 쓰도록 배선 + 로봇별 메시 렌더.
+
+- **메시 서빙 일반화** (`meshes_setup.py`): UR5 하드코딩 → `robot_assets(robot_id)` 로 로봇별
+  지연 준비·캐시. 세 로봇 모두 `pkg_parent=dirname(REPOSITORY_PATH)` 기준으로 메시 해석
+  (ur5/panda=example-robot-data·.dae, iiwa14=drake·.obj). `/api/robots/{id}` 상세에 `urdf_url`·
+  `packages`(urdf-loader 매핑) 추가.
+- **프론트 셀렉터** (`root.tsx`): 상단 중앙 드롭다운(`/api/robots`). 바꾸면 `RobotView` 를
+  `key={robotId}` 로 remount → URDF 재로드, 관절은 새 로봇 ready 로 초기화. 모든 호출
+  (run/fk/ik)에 `robot_id` 전달. `api.ts` 에 `getRobots`/`getRobotDetail`+`RobotDetail` 추가,
+  고아가 된 `getRobot`/`RobotInfo` 제거.
+- **OBJ 렌더** (`RobotView.tsx`): iiwa14 `.obj`(재질 없음) 지원 + 색이 파일명에 인코딩된 drake
+  컨벤션(`link_2_orange.obj`/`_grey`)을 `objColor()` 로 KUKA 주황/회색/다크 매핑. ur5/panda
+  `.dae` 는 메시 내장 재질 그대로(자동) — 포맷이 강제하는 비대칭.
+- **로봇별 프로그램** (`ProgramList.tsx`): `program_id = robotId` 로 분리(스키마 변경 없이 기존
+  컬럼 재활용) → 로봇마다 독립 티칭, 6↔7 차원 충돌 없음. (panda 7-DOF 티치→실행 sse 5.3e-10)
+- **UI 정리**: 관절 슬라이더를 `ControlPanel`(→"제어·시뮬레이션")에서 떼어 `JointPanel`(좌측,
+  "관절 각도")로 분리 — 직교좌표와 한 행 배치. 고아 props(`joints`/`onChange`)·`toDeg` 정리.
+- **검증**: ur5/iiwa14/panda 메시 복사·정적 서빙 OK, 미등록 id→404, tsc/build clean, 라이브
+  브라우저 렌더 확인(iiwa14 KUKA 색 포함).
+- 미구현 메모: 힘/하이브리드는 시작자세 기준 단일 벽이라 **위치 프로그램 구동 비해당**
+  (force=힘 regulate / hybrid=직선 한 획). 경로 추종(컨투어) 확장은 별도 과제.
+
 ---
 
 ## 📋 다음 할 것 (TODO)
@@ -352,8 +376,9 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
       [x] **Phase 3 레지스트리 + `/api/robots`**(`robot_registry.py`·`routers/robots.py`) ✅ 2026-06-19
       — ur5/iiwa14/panda 지연로딩·캐시, 목록+상세(관절·한계·ready TCP). yourdfpy→main dep.
       [x] **Phase 4 sim·controllers 파라미터화**(`robot_id`·RobotModel 주입, panda 7-DOF
-      검증) ✅ 2026-06-22 → [ ] 프론트 셀렉터 + 로봇별 메시
-      → [ ] URDF 업로드. (7-DOF 널공간 제어도)
+      검증) ✅ 2026-06-22
+      [x] **Phase 5 프론트 셀렉터 + 로봇별 메시**(OBJ 색·로봇별 프로그램·JointPanel 분리)
+      ✅ 2026-06-22 → [ ] URDF 업로드. (7-DOF 널공간 제어도)
 - [x] **속도제어**(관절 θ̇_d / 직교 resolved-rate `J†`) ✅ 2026-06-18
       └ **순수 토크 입력 모드**(§11.4)는 τ 입력 스키마 필요 → 보류
 - [x] **어드미턴스**(§11.7.2) ✅ 2026-06-18
