@@ -41,8 +41,17 @@ interface Props {
   noise: number;
   onNoiseChange: (value: number) => void;
   noiseSeed: number;
-  forceTask: { fd: number; gap: number; move_len: number };
-  onForceTaskChange: (key: 'fd' | 'gap' | 'move_len', value: number) => void;
+  forceTask: {
+    fd: number;
+    gap: number;
+    move_len: number;
+    shape: string;
+    radius: number;
+  };
+  onForceTaskChange: (
+    key: 'fd' | 'gap' | 'move_len' | 'radius' | 'shape',
+    value: number | string,
+  ) => void;
   push: number[];
   onPushAxisChange: (index: number, value: number) => void;
   onRun: () => void;
@@ -238,8 +247,45 @@ export default function ControlPanel({
           {(controller === 'force' || controller === 'hybrid') && (
             <div className='bg-muted/50 space-y-3 rounded-md p-2.5'>
               <p className='text-muted-foreground text-xs font-medium'>
-                벽 · 힘 목표
+                표면 · 힘 목표
               </p>
+              <div className='space-y-1.5'>
+                <Label className='text-muted-foreground text-xs'>표면</Label>
+                <Select
+                  value={forceTask.shape}
+                  onValueChange={(v) => onForceTaskChange('shape', v)}
+                  disabled={running}
+                >
+                  <SelectTrigger className='w-full' size='sm'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='plane'>평면 (벽)</SelectItem>
+                    <SelectItem value='cylinder'>원기둥</SelectItem>
+                    <SelectItem value='sphere'>구</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {forceTask.shape !== 'plane' && (
+                <div className='space-y-1.5'>
+                  <div className='flex items-center justify-between'>
+                    <Label className='text-muted-foreground text-xs'>
+                      곡면 반경
+                    </Label>
+                    <span className='text-xs tabular-nums'>
+                      {(forceTask.radius * 100).toFixed(0)} cm
+                    </span>
+                  </div>
+                  <Slider
+                    min={0.03}
+                    max={0.25}
+                    step={0.01}
+                    value={[forceTask.radius]}
+                    disabled={running}
+                    onValueChange={([v]) => onForceTaskChange('radius', v)}
+                  />
+                </div>
+              )}
               <div className='space-y-1.5'>
                 <div className='flex items-center justify-between'>
                   <Label className='text-muted-foreground text-xs'>

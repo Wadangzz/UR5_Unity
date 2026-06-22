@@ -383,7 +383,24 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 - **Level 2 완료**: 공구 누름축(z)을 −n(p) 에 정렬(`_align_rot` Rodrigues 최소회전,
   R_d=align(tool_z0,−n(p))·R0). 평면은 −n 상수라 R_d=R0 자동(회귀 무손상). 검증: 원기둥
   법선추종 오차 3.0°·구 1.9°(Level 1이면 ~45°), 힘 20.0N·발산 없음.
-- 남은 것: **프론트**(스키마 shape/center/radius + UI + 3D 곡면 렌더 + 프로그램으로 hybrid 실행).
+### 🌀 컨투어 Step 3 — 프론트(표면 UI·3D 렌더) + 마우스로 경로 그리기 (branch `hybrid-contour`)
+
+브라우저에서 곡면 컨투어를 직접 설정·실행. 핵심 UX = **3D 곡면에 마우스로 경로 그리기**.
+
+- **백엔드**: `ForceTask` +`shape`/`radius`, `SurfaceInfo` 응답, `RunRequest.force_path`(그린 점).
+  컨트롤러가 시작자세에서 원기둥/구 center 계산해 `wall` 응답. **force_path** 들어오면 점을
+  표면 투영+법선정렬 IK(`sim._make_surface`/`_align_rot` 재사용)로 컨투어 waypoints 생성.
+- **프론트**: `ControlPanel` 표면 선택(평면/원기둥/구)+반경. `WallPlane`이 평면/원기둥/구 3D
+  렌더 + **클릭 시 `event.point`(레이캐스팅)로 경로 점 추가**. `root` 가 현재 자세 기준 표면
+  **미리보기**(`fk`→`computeSurface`, 백엔드와 동일) 렌더, 그린 점(빨강 구+선) 표시, Run 시
+  `force_path` 전송. 상단 안내 "표면 클릭해 경로 그리기 · N점 · 지우기".
+- **검증**: 평면 회귀 20.00N, 원기둥/구 그린경로 컨투어 force 20.01N·발산 없음·끝점 도달
+  (5mm=누름 침투), tsc/build clean. 라이브 브라우저 동작 확인(평면=납작·곡면=3D 휨).
+- **개념(대화)**: "누르면서 따라가는 경로는 반드시 표면 위" — §11.6 이 법선=힘/접선=위치로
+  쪼개므로 같은 방향 힘+위치 동시 불가. 곡면에 그리면 = 누르기+3D경로(따로 모드 불필요),
+  허공 경로만 누를 표면이 없어 모션 전용. 평면에 그려서 납작했던 것.
+- 남은 것(새 챕터): **CAD/메시 import**(STL/OBJ→메시 최근접점 표면모델, STEP은 변환). 제어는
+  §11.6 그대로, `_make_surface`에 메시 쿼리 1종 추가. 시뮬 속도(per-step 쿼리) 고려.
 
 ---
 

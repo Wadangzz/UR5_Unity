@@ -35,20 +35,53 @@ def run(req: RunRequest, session: Session):
     else:
         raise HTTPException(400, "program_id 또는 waypoints 중 하나는 필요합니다")
 
-    # 힘/하이브리드 제어: 벽을 시작자세 EE 가 '보는 방향'(도구축)에 배치한다.
-    # push = R0·tool_axis (base 에서 EE 가 누르는 방향) → 벽 법선 = −push,
-    # 벽면 point = 시작 EE + push·gap (도구가 보는 쪽으로 gap 만큼 앞).
+    # 힘/하이브리드 제어: 표면을 시작자세 EE 도구축(보는 방향)에 배치한다.
+    # push = R0·tool_axis (EE 가 누르는 방향). 평면=법선 −push·point gap 앞,
+    # 곡면=중심을 push 로 (gap+radius) 앞에 둬 시작 EE 가 표면 밖 gap 에 선다.
     force_task = None
+    wall = None
     if req.controller in ("force", "hybrid"):
         ft = (req.force_task or ForceTask()).model_dump()
         T0 = robot.fk(np.array(waypoints[0]))
         R0, p_start = T0[:3, :3], T0[:3, 3]
         push = R0 @ np.array(ft["tool_axis"], float)
         push = push / np.linalg.norm(push)
-        ft["normal"] = (-push).tolist()                          # 벽 외향(로봇 쪽)
         ft["tangent"] = (R0 @ np.array(ft["tan_axis"], float)).tolist()
-        ft["point"] = (p_start + push * ft["gap"]).tolist()
+        shape = ft.get("shape", "plane")
+        if shape in ("cylinder", "sphere"):
+            radius = float(ft["radius"])
+            center = p_start + push * (ft["gap"] + radius)       # 중심 = 표면 뒤
+            ft["center"] = center.tolist()
+            axis = ft["tangent"]                                 # 원기둥 축 = 접선(EE x)
+            if shape == "cylinder":
+                ft["axis"] = axis
+            wall = {"shape": shape, "center": center.tolist(),
+                    "axis": axis, "radius": radius}
+        else:                                                    # plane (현행)
+            ft["normal"] = (-push).tolist()                      # 벽 외향(로봇 쪽)
+            ft["point"] = (p_start + push * ft["gap"]).tolist()
+            wall = {"shape": "plane", "point": ft["point"],
+                    "normal": ft["normal"]}
         force_task = ft
+
+    # 사용자가 3D 표면에 그린 경로(force_path, base xyz) → 표면 위 자세정렬 IK 로
+    # 하이브리드 컨투어 waypoints 생성(start 에서 출발). 점을 표면에 투영하고 공구
+    # 누름축을 그 점 법선에 맞춰 IK(sim 의 표면모델·정렬 재사용).
+    if req.controller == "hybrid" and req.force_path and force_task is not None:
+        surf = sim._make_surface(force_task)
+        T0 = robot.fk(np.array(waypoints[0]))
+        R0, p0 = T0[:3, :3], T0[:3, 3]
+        tool_z0 = -surf(p0)[0]                        # 시작 누름방향
+        wp, seed = [np.array(waypoints[0], float)], np.array(waypoints[0], float)
+        for p in req.force_path:
+            n, _, p_proj = surf(np.array(p, float))
+            R_t = sim._align_rot(tool_z0, -n) @ R0
+            T = np.eye(4)
+            T[:3, :3], T[:3, 3] = R_t, p_proj
+            th, _ = robot.ik(T, seed)
+            wp.append(th)
+            seed = th
+        waypoints = [w.tolist() for w in wp]
 
     plant, ctrl = realism.build_models(robot.dyn_args, req.payload, req.model_scale)
     result = sim.run_simulation(
@@ -58,9 +91,8 @@ def run(req: RunRequest, session: Session):
         traj_mode=req.traj_mode, friction=req.friction, tau_max=req.tau_max,
         control_rate=req.control_rate, noise=req.noise,
         noise_seed=req.noise_seed, force_task=force_task, robot=robot)
-    if force_task is not None:                    # 3D 벽 렌더용 위치·법선
-        result["wall"] = {"point": force_task["point"],
-                          "normal": force_task["normal"]}
+    if force_task is not None:                    # 3D 표면 렌더용 기하
+        result["wall"] = wall
 
     # 재생 중 직교좌표·manipulability 를 라이브로 보이게: θ(t) 에서 EE pose·σ_min
     # 시계열을 한 번에 계산해 응답에 실어 보낸다 (프레임당 REST 왕복 없이 인덱싱).

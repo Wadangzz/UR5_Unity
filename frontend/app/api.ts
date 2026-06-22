@@ -152,11 +152,13 @@ export const CONTROLLERS: ControllerSpec[] = [
 // 극배치(2차계) 자동튜닝이 의미있는 제어기. 속도제어(1차계)·임피던스(직교강성)는 제외.
 export const POLE_PLACE = ['pd', 'pid', 'computed_torque'];
 
-// 힘/하이브리드 제어의 환경(벽)·목표. 프론트는 이 3개만 보내고 나머지는 백엔드 기본값.
+// 힘/하이브리드 제어의 환경(표면)·목표. 표면 기하(center/axis/point/normal)는 백엔드가 계산.
 export interface ForceTask {
   fd: number; // 목표 누름힘(N)
-  gap: number; // 시작 시 벽까지 거리(m)
-  move_len: number; // 접선 이동거리(m, 하이브리드)
+  gap: number; // 시작 시 표면까지 거리(m)
+  move_len: number; // 접선 이동거리(m, 하이브리드 단일획)
+  shape: string; // plane | cylinder | sphere (컨투어)
+  radius: number; // 곡면 반경(m, cylinder/sphere)
 }
 
 export interface RunRequest {
@@ -178,7 +180,8 @@ export interface RunRequest {
   control_rate?: number; // 0=연속(이상) / >0=이산 ZOH 제어율(Hz) — 토크 제어
   noise?: number; // 센서 측정 노이즈 std(rad), 이산 ZOH — 토크 제어
   noise_seed?: number; // 노이즈 realization seed(고정=재현성, 바꾸면 다른 패턴)
-  force_task?: ForceTask; // 힘/하이브리드 제어 환경(벽)·목표
+  force_task?: ForceTask; // 힘/하이브리드 제어 환경(표면)·목표
+  force_path?: number[][]; // 표면에 그린 경로(base xyz) — 하이브리드 컨투어
 }
 
 export interface RunResponse {
@@ -199,7 +202,15 @@ export interface RunResponse {
   force_des?: number | null; // 목표 힘(N)
   tan_pos?: number[]; // 접선 실제 변위(m) — 하이브리드
   tan_des?: number[]; // 접선 목표 변위(m) — 하이브리드
-  wall?: { point: number[]; normal: number[] } | null; // 벽(3D 렌더용)
+  // 표면 기하(3D 렌더용). plane=point/normal, cylinder=center/axis/radius, sphere=center/radius
+  wall?: {
+    shape: string;
+    point?: number[];
+    normal?: number[];
+    center?: number[];
+    axis?: number[];
+    radius?: number;
+  } | null;
 }
 
 // URDF 에서 추출한 관절 메타 (슬라이더 범위용, rad)

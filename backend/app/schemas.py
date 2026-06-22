@@ -43,12 +43,14 @@ class FKResponse(SQLModel):
 
 
 class ForceTask(SQLModel):
-    """힘/하이브리드 제어의 환경(벽)·목표 사양. 프론트는 fd/gap/move_len 만 보내고
-    나머지는 기본값, 벽 point 는 백엔드가 시작자세 FK 로 계산해 채운다."""
+    """힘/하이브리드 제어의 환경(표면)·목표 사양. 프론트는 fd/gap/move_len/shape/radius
+    만 보내고, 표면 기하(point/normal·center/axis)는 백엔드가 시작자세 FK 로 계산해 채운다."""
     fd: float = 20.0                             # 목표 누름힘(N)
-    gap: float = 0.05                            # 시작 시 벽까지 거리(m)
-    k_env: float = 4000.0                        # 벽 강성(N/m)
-    b_env: float = 40.0                          # 벽 감쇠(N·s/m)
+    gap: float = 0.05                            # 시작 시 표면까지 거리(m)
+    shape: str = "plane"                         # plane | cylinder | sphere (컨투어)
+    radius: float = 0.08                         # 곡면 반경(m, cylinder/sphere)
+    k_env: float = 4000.0                        # 표면 강성(N/m)
+    b_env: float = 40.0                          # 표면 감쇠(N·s/m)
     # 누르는 방향은 EE 도구축(시작자세 기준)으로 잡는다 — 엔드이펙터가 보는 쪽으로 누름.
     tool_axis: list[float] = [0.0, 0.0, 1.0]     # 누름 도구축(EE 로컬, 보는 방향)
     tan_axis: list[float] = [1.0, 0.0, 0.0]      # 접선 도구축(EE 로컬, hybrid 선긋기)
@@ -58,6 +60,17 @@ class ForceTask(SQLModel):
     move_start: float = 0.8                      # 접선 이동 시작(s, hybrid)
     move_time: float = 1.5                       # 접선 이동 소요(s, hybrid)
     t_end: float = 4.0                           # 시뮬 길이(s)
+
+
+class SurfaceInfo(SQLModel):
+    """3D 렌더용 표면 기하(base). plane=point/normal, cylinder=center/axis/radius,
+    sphere=center/radius."""
+    shape: str = "plane"
+    point: list[float] = []                      # plane: 평면 위 한 점
+    normal: list[float] = []                     # plane: 외향 법선
+    center: list[float] = []                     # cylinder/sphere: 중심(축선/구심)
+    axis: list[float] = []                       # cylinder: 축 방향
+    radius: float = 0.0                          # cylinder/sphere 반경
 
 
 class RunRequest(SQLModel):
@@ -79,7 +92,8 @@ class RunRequest(SQLModel):
     control_rate: float = 0.0                    # 0=연속(이상) / >0=이산 ZOH 제어율(Hz)
     noise: float = 0.0                           # 센서 측정 노이즈 std(rad) — 토크 제어만
     noise_seed: int = 0                          # 노이즈 realization seed(고정=재현성)
-    force_task: ForceTask | None = None          # 힘/하이브리드 제어 환경(벽)·목표
+    force_task: ForceTask | None = None          # 힘/하이브리드 제어 환경(표면)·목표
+    force_path: list[list[float]] | None = None  # 사용자가 표면에 그린 경로(base xyz) — 컨투어
 
 
 class RunResponse(SQLModel):
@@ -100,4 +114,4 @@ class RunResponse(SQLModel):
     force_des: float | None = None            # 목표 힘(N) — 힘/하이브리드
     tan_pos: list[float] = []                 # 접선 실제 변위(m) — 하이브리드
     tan_des: list[float] = []                 # 접선 목표 변위(m) — 하이브리드
-    wall: dict[str, list[float]] | None = None  # 벽 {point, normal}(base) — 3D 렌더용
+    wall: SurfaceInfo | None = None           # 표면 기하(base) — 3D 렌더용

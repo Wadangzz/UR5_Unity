@@ -6,7 +6,9 @@ import {
   Grid,
   GizmoHelper,
   GizmoViewport,
+  Line,
 } from '@react-three/drei';
+import { Quaternion, Vector3 } from 'three';
 import RobotView from '@/components/RobotView';
 import WallPlane from '@/components/WallPlane';
 import ControlPanel from '@/components/ControlPanel';
@@ -24,6 +26,7 @@ import {
 import {
   CONTROLLERS,
   POLE_PLACE,
+  fk,
   getRobots,
   runSimulation,
   type JointMeta,
@@ -31,6 +34,61 @@ import {
   type RunRequest,
   type RunResponse,
 } from '@/api';
+
+type Wall = {
+  shape: string;
+  point?: number[];
+  normal?: number[];
+  center?: number[];
+  axis?: number[];
+  radius?: number;
+};
+
+// EE pose + 표면 설정 → 표면 기하(백엔드 controller 와 동일 계산). 그리기 미리보기용.
+function computeSurface(
+  pose: number[],
+  shape: string,
+  gap: number,
+  radius: number,
+): Wall {
+  const p = new Vector3(pose[0], pose[1], pose[2]);
+  const q = new Quaternion(pose[3], pose[4], pose[5], pose[6]);
+  const push = new Vector3(0, 0, 1).applyQuaternion(q).normalize();
+  if (shape === 'cylinder' || shape === 'sphere') {
+    const center = p.clone().addScaledVector(push, gap + radius);
+    const w: Wall = { shape, center: center.toArray(), radius };
+    if (shape === 'cylinder')
+      w.axis = new Vector3(1, 0, 0).applyQuaternion(q).normalize().toArray();
+    return w;
+  }
+  return {
+    shape: 'plane',
+    point: p.clone().addScaledVector(push, gap).toArray(),
+    normal: push.clone().negate().toArray(),
+  };
+}
+
+// 사용자가 표면에 찍은 경로 점(빨강 구) + 잇는 선
+function DrawnPath({ points }: { points: number[][] }) {
+  if (points.length === 0) return null;
+  return (
+    <>
+      {points.map((pt, i) => (
+        <mesh key={i} position={pt as [number, number, number]}>
+          <sphereGeometry args={[0.008, 16, 16]} />
+          <meshStandardMaterial color='#ef4444' />
+        </mesh>
+      ))}
+      {points.length > 1 && (
+        <Line
+          points={points as [number, number, number][]}
+          color='#ef4444'
+          lineWidth={2}
+        />
+      )}
+    </>
+  );
+}
 
 export default function App() {
   // 멀티로봇: 목록 + 선택. robotId 가 바뀌면 RobotView 를 key 로 remount → 재로드.
@@ -52,14 +110,25 @@ export default function App() {
   const [controlRate, setControlRate] = useState(0); // 0=연속, >0=이산 ZOH(Hz)
   const [noise, setNoise] = useState(0); // 센서 노이즈 std(rad)
   const [noiseSeed, setNoiseSeed] = useState(0); // 노이즈 realization seed
-  // 힘/하이브리드 제어: 벽·목표 (fd 목표힘, gap 접근간격m, move_len 접선이동m)
+  // 힘/하이브리드: 표면·목표 (fd 목표힘, gap 접근간격, move_len 접선이동, shape 표면, radius 곡면반경)
   const [forceTask, setForceTask] = useState({
     fd: 20,
     gap: 0.05,
     move_len: 0.1,
+    shape: 'plane', // plane | cylinder | sphere (컨투어)
+    radius: 0.08, // 곡면 반경(m)
   });
-  const setForceTaskField = (key: 'fd' | 'gap' | 'move_len', value: number) =>
+  const setForceTaskField = (
+    key: 'fd' | 'gap' | 'move_len' | 'radius' | 'shape',
+    value: number | string,
+  ) => {
     setForceTask((prev) => ({ ...prev, [key]: value }));
+    if (key === 'shape') setDrawnPath([]); // 표면 바뀌면 그린 경로 무효
+  };
+  // 하이브리드 컨투어: 표면 미리보기(현재 자세 기준) + 표면에 그린 경로 점
+  const [previewWall, setPreviewWall] = useState<Wall | null>(null);
+  const [drawnPath, setDrawnPath] = useState<number[][]>([]);
+  const addDrawPoint = (p: number[]) => setDrawnPath((prev) => [...prev, p]);
   const [push, setPush] = useState<number[]>([0, 0, 0]); // 외란 외력(N, base XYZ)
   const setPushAxis = (index: number, value: number) =>
     setPush((prev) => prev.map((p, i) => (i === index ? value : p)));
@@ -115,6 +184,38 @@ export default function App() {
       .then(setRobots)
       .catch(() => {});
   }, []);
+
+  // 힘/하이브리드 설정 중: 현재 자세 기준 표면 미리보기 (그리기 타깃). 디바운스.
+  useEffect(() => {
+    const isForce = controller === 'force' || controller === 'hybrid';
+    if (running || !isForce || joints.length === 0) {
+      setPreviewWall(null);
+      return;
+    }
+    const id = setTimeout(() => {
+      fk(joints, robotId)
+        .then((r) =>
+          setPreviewWall(
+            computeSurface(
+              r.pose,
+              forceTask.shape,
+              forceTask.gap,
+              forceTask.radius,
+            ),
+          ),
+        )
+        .catch(() => {});
+    }, 150);
+    return () => clearTimeout(id);
+  }, [
+    joints,
+    controller,
+    forceTask.shape,
+    forceTask.gap,
+    forceTask.radius,
+    robotId,
+    running,
+  ]);
 
   // 로봇 전환: 이전 결과/라이브 표시 비우고 robotId 변경(→ RobotView remount).
   // 관절각은 RobotView 가 새 로봇 ready 를 onLoaded 로 보고하면 거기서 초기화된다.
@@ -197,14 +298,19 @@ export default function App() {
       setRunning(false);
     }
   };
-  // 힘/하이브리드는 현재 자세에서 벽을 누름(출발=현재). 그 외엔 ready→목표.
+  // 힘/하이브리드는 현재 자세에서 누름(출발=현재). 하이브리드+그린경로면 컨투어 추종.
   const isForceCtrl = controller === 'force' || controller === 'hybrid';
-  const run = () =>
-    runReq(
-      isForceCtrl
-        ? { waypoints: [[...joints]] }
-        : { waypoints: [ready, [...joints]] },
-    );
+  const run = () => {
+    if (controller === 'hybrid' && drawnPath.length > 0) {
+      runReq({ waypoints: [[...joints]], force_path: drawnPath });
+    } else {
+      runReq(
+        isForceCtrl
+          ? { waypoints: [[...joints]] }
+          : { waypoints: [ready, [...joints]] },
+      );
+    }
+  };
   // 티치 프로그램 순회 (현재 자세에서 출발 — 위 제어기 세팅 그대로 적용)
   const runProgram = (programId: string) =>
     runReq({ program_id: programId, start: [...joints] });
@@ -244,6 +350,28 @@ export default function App() {
           </Select>
         </div>
       </div>
+
+      {/* 하이브리드 컨투어: 표면에 마우스로 경로 그리기 안내 + 점수/지우기 */}
+      {controller === 'hybrid' && !running && (
+        <div className='absolute top-16 left-1/2 z-20 -translate-x-1/2'>
+          <div className='bg-card/95 supports-[backdrop-filter]:bg-card/80 flex items-center gap-3 rounded-lg border px-3 py-1.5 text-xs shadow-sm backdrop-blur'>
+            <span className='text-muted-foreground'>
+              🖱️ 표면을 클릭해 경로를 그리세요 ·{' '}
+              <span className='font-medium text-red-600'>
+                {drawnPath.length}점
+              </span>
+            </span>
+            <button
+              type='button'
+              onClick={() => setDrawnPath([])}
+              disabled={drawnPath.length === 0}
+              className='text-muted-foreground hover:text-foreground pointer-events-auto disabled:opacity-40'
+            >
+              지우기
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className='absolute top-4 right-4 z-10'>
         <ControlPanel
@@ -339,8 +467,14 @@ export default function App() {
           onLoaded={handleLoaded}
         />
 
-        {/* 힘/하이브리드 제어가 누르는 가상 벽 (마지막 Run 결과에 있을 때만) */}
-        <WallPlane wall={result?.wall} />
+        {/* 힘/하이브리드 표면 (설정 중=미리보기, 재생 중=실제). 하이브리드면 클릭해 경로 그리기 */}
+        <WallPlane
+          wall={running ? result?.wall : previewWall}
+          onDraw={
+            !running && controller === 'hybrid' ? addDrawPoint : undefined
+          }
+        />
+        <DrawnPath points={drawnPath} />
 
         {/* 로봇 베이스 프레임 좌표축 (Z-up: X 빨강·Y 초록·Z 파랑) */}
         <axesHelper args={[0.4]} />
