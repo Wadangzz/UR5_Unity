@@ -622,6 +622,72 @@ def _wall_contact(n, p_w, k_env, b_env, robot):
 
 
 # ----------------------------------------------------------------------
+#  곡면 환경 모델 (하이브리드 컨투어 추종 — 평면/원기둥/구)
+# ----------------------------------------------------------------------
+def _make_surface(ft):
+    """force_task 표면 사양 → surface(p) → (n 외향단위법선, δ 침투깊이, p_proj 표면투영).
+
+    shape: 'plane'(기본) | 'cylinder' | 'sphere'. 곡면은 법선 n(p)가 위치종속
+    (MR §11.6 의 구속 A(θ)) — 제어식(투영 P)은 동일하고 매 스텝 접촉점 법선만 다르게
+    들어간다. 침투 δ = max(0, R−거리): EE 가 표면 안으로 들어간 깊이. δ̇=−n·ṗ(호출측).
+    """
+    shape = ft.get("shape", "plane")
+    if shape == "sphere":
+        c = np.asarray(ft.get("center", [0.0, 0.0, 0.0]), float)
+        R = float(ft.get("radius", 0.1))
+
+        def surf(p):
+            d = p - c
+            rho = float(np.linalg.norm(d))
+            n = d / rho if rho > 1e-9 else np.array([0.0, 0.0, 1.0])
+            return n, max(0.0, R - rho), c + R * n
+
+        return surf
+    if shape == "cylinder":
+        c = np.asarray(ft.get("center", [0.0, 0.0, 0.0]), float)
+        a = np.asarray(ft.get("axis", [1.0, 0.0, 0.0]), float)
+        a = a / np.linalg.norm(a)
+        R = float(ft.get("radius", 0.1))
+
+        def surf(p):
+            d = p - c
+            ax = float(d @ a)                       # 축방향 성분
+            d_perp = d - ax * a
+            rho = float(np.linalg.norm(d_perp))
+            n = d_perp / rho if rho > 1e-9 else np.array([1.0, 0.0, 0.0])
+            return n, max(0.0, R - rho), c + ax * a + R * n
+
+        return surf
+    # plane (기본, 현행과 동일)
+    n0 = np.asarray(ft.get("normal", [0.0, 0.0, 1.0]), float)
+    n0 = n0 / np.linalg.norm(n0)
+    p_w = np.asarray(ft.get("point", [0.0, 0.0, 0.0]), float)
+
+    def surf(p):
+        signed = float(n0 @ (p - p_w))
+        return n0, max(0.0, -signed), p - signed * n0
+
+    return surf
+
+
+def _surface_contact(surf, k_env, b_env, robot):
+    """penalty 곡면/평면 접촉 factory. 반환 contact(th,dth) →
+    (f_meas 법선반력 N, δ 침투깊이 m, F_env 반력 3-vec base +n). 표면은 surf 가 정의."""
+    def contact(th, dth):
+        Tee = robot.fk(th)
+        R, p = Tee[:3, :3], Tee[:3, 3]
+        n, delta, _ = surf(p)
+        if delta <= 0.0:
+            return 0.0, 0.0, np.zeros(3)
+        pdot = R @ (robot.jacobian_body(th) @ dth)[3:6]     # base EE 선속도
+        ddelta = -float(n @ pdot)                           # 침투 속도(δ̇=−n·ṗ)
+        f_meas = max(0.0, k_env * delta + b_env * ddelta)
+        return f_meas, delta, n * f_meas
+
+    return contact
+
+
+# ----------------------------------------------------------------------
 #  토크 plant — 힘 제어 (MR §11.5, 식 11.51/11.54)
 # ----------------------------------------------------------------------
 def _run_force(WP, gains, hz, plant, force_task, robot):
@@ -737,18 +803,14 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
     move_len(접선 이동거리 m), move_start/move_time(s).  gains: {kp,kd,kfp,kfi,kfd}.
     """
     ft = force_task or {}
-    n = np.asarray(ft.get("normal", [0.0, 0.0, 1.0]), float)
-    n = n / np.linalg.norm(n)
-    p_w = np.asarray(ft.get("point", [0.0, 0.0, 0.0]), float)
     fd = float(ft.get("fd", 20.0))
     k_env = float(ft.get("k_env", 4000.0))
     b_env = float(ft.get("b_env", 40.0))
-    t_end = float(ft.get("t_end", 4.0))
     t_hat = np.asarray(ft.get("tangent", [1.0, 0.0, 0.0]), float)
-    t_hat = t_hat / np.linalg.norm(t_hat)        # 접선 이동 방향(base)
-    move_len = float(ft.get("move_len", 0.10))   # 접선 이동거리 m
+    t_hat = t_hat / np.linalg.norm(t_hat)        # 접선(단일획 fallback, base)
+    move_len = float(ft.get("move_len", 0.10))   # 단일획 접선 이동거리 m
     move_start = float(ft.get("move_start", 0.8))
-    move_time = float(ft.get("move_time", 1.5))
+    move_time = float(ft.get("move_time", 1.5))  # 경로 구간당 시간
     Kp = float(gains.get("kp", 100.0))           # 모션 PID (task accel 게인)
     Kd = float(gains.get("kd", 20.0))
     Kiv = float(gains.get("kiv", 60.0))          # 모션 적분(식 11.61 의 Ki∫Xe)
@@ -758,27 +820,44 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
     N = robot.n
     plant = plant or robot.dyn_args
     Mp, Gp, Sp = df.stack_model(*plant)
-    contact = _wall_contact(n, p_w, k_env, b_env, robot)
+    surf = _make_surface(ft)                      # plane | cylinder | sphere
+    contact = _surface_contact(surf, k_env, b_env, robot)
 
-    R0 = robot.fk(WP[0])[:3, :3]                  # 자세는 시작값 유지
+    R0 = robot.fk(WP[0])[:3, :3]                  # 자세 고정(Level 1)
     p0 = robot.fk(WP[0])[:3, 3]
-    # 모션 목표는 벽면 위에 둔다(법선 성분 = 벽). 그래야 법선 위치오차가 모션
-    # 제어기로 안 새고(법선은 힘 제어 담당), 접선 추종이 깨끗하다 (교재 가정 A·Vd=0).
-    p_anchor = p0 - n * float(n @ (p0 - p_w))
+    # 모션 경로: 티칭 waypoint(>1)면 표면에 투영한 경로를 접선 추종(컨투어), 1점이면
+    # 접선 직선 한 획(move_len, 하위호환). 목표를 표면에 투영해 둬야 법선 위치오차가
+    # 접선으로 새지 않는다 (교재 가정 A·Vd=0).
+    # _prep_waypoints 가 단일 포즈를 [w,w] 로 복제하므로 연속 중복을 제거한다.
+    pts = [surf(robot.fk(w)[:3, 3])[2] for w in WP]
+    path = [pts[0]]
+    for q in pts[1:]:
+        if np.linalg.norm(q - path[-1]) > 1e-6:
+            path.append(q)
+    if len(path) < 2:                            # 티칭 경로 없음 → 접선 직선 한 획
+        path = [surf(p0)[2], surf(p0 + t_hat * move_len)[2]]
+    n_seg = len(path) - 1
+    move_total = n_seg * move_time
+    t_end = max(float(ft.get("t_end", 4.0)), move_start + move_total + 1.0)
 
     def motion_des(t):
-        """접선 직선 목표 → (X_d 4x4, V_d body twist of {d})."""
-        if t < move_start:
-            s, sd = 0.0, 0.0
-        elif t < move_start + move_time:
-            s, sd, _ = quintic_time_scaling(t - move_start, move_time)
+        """경로 목표 → (X_d 4x4, V_d body twist). 표면 재투영 + 접선 속도(자세 R0 고정)."""
+        tau = t - move_start
+        if tau <= 0.0:
+            k, s, sd = 0, 0.0, 0.0
+        elif tau >= move_total:
+            k, s, sd = n_seg - 1, 1.0, 0.0
         else:
-            s, sd = 1.0, 0.0
-        p_d = p_anchor + t_hat * (move_len * s)
+            k = int(tau // move_time)
+            s, sd, _ = quintic_time_scaling(tau - k * move_time, move_time)
+        p_raw = (1.0 - s) * path[k] + s * path[k + 1]
+        v_raw = sd * (path[k + 1] - path[k])
+        n_loc, _, p_d = surf(p_raw)               # 표면 재투영 + 국소 법선
+        v_tan = v_raw - float(n_loc @ v_raw) * n_loc
         X_d = np.eye(4)
         X_d[:3, :3] = R0
         X_d[:3, 3] = p_d
-        Vd = np.concatenate([np.zeros(3), R0.T @ (t_hat * move_len * sd)])
+        Vd = np.concatenate([np.zeros(3), R0.T @ v_tan])
         return X_d, Vd
 
     def rhs(t, x):
@@ -790,7 +869,8 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
         Vb = Jb @ dth
         M = df.mass_matrix(th, Mp, Gp, Sp)
         Linv = Jb @ np.linalg.solve(M, Jb.T)         # Λ⁻¹ = Jb M⁻¹ Jbᵀ
-        nb = R.T @ n                                 # body 프레임 법선(단위)
+        nl = surf(X[:3, 3])[0]                        # 접촉점 표면 법선(위치종속)
+        nb = R.T @ nl                                 # body 프레임 법선(단위)
 
         # 투영행렬 P (식 11.60): A=[0 0 0 | nb] 법선 운동 구속
         A = np.concatenate([np.zeros(3), nb])[None, :]   # 1×6
@@ -827,7 +907,7 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
                     rtol=1e-4, atol=1e-7, events=_blowup_event(N))
 
     TH, DTH = sol.y[:N].T, sol.y[N:2 * N].T
-    fmeas, ferr, tan_pos, tan_des = [], [], [], []
+    fmeas, ferr, tan_pos, tan_des, tcp_des = [], [], [], [], []
     for i in range(len(sol.t)):
         fm, _, _ = contact(TH[i], DTH[i])
         fmeas.append(fm)
@@ -836,6 +916,7 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
         tan_pos.append(float(t_hat @ (p - p0)))      # 실제 접선 변위
         X_d, _ = motion_des(sol.t[i])
         tan_des.append(float(t_hat @ (X_d[:3, 3] - p0)))   # 목표 접선 변위
+        tcp_des.append(X_d[:3, 3].tolist())          # 목표 경로 위치(컨투어 추종 검증)
     fmeas = np.array(fmeas)
     diverged = sol.status != 0
 
@@ -850,6 +931,7 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
         "force_des": fd,
         "tan_pos": tan_pos,                        # 실제 접선 변위(m)
         "tan_des": tan_des,                        # 목표 접선 변위(m)
+        "tcp_des": tcp_des,                        # 목표 경로 위치(컨투어, base)
         "waypoints_tcp": [robot.fk(w)[:3, 3].tolist() for w in WP],
         "settle_time": None,
         "steady_state_error": None,
