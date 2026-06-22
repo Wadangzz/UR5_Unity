@@ -21,6 +21,7 @@ class ProgramSummary(SQLModel):
 class IKRequest(SQLModel):
     pose: list[float]                       # [x,y,z, qx,qy,qz,qw]
     seed: list[float] | None = None         # 초기 관절각(rad)
+    robot_id: str = "ur5"                   # 대상 로봇 (레지스트리 id)
 
 
 class IKResponse(SQLModel):
@@ -31,6 +32,7 @@ class IKResponse(SQLModel):
 
 class FKRequest(SQLModel):
     theta: list[float]                      # 관절각(rad)
+    robot_id: str = "ur5"                   # 대상 로봇 (레지스트리 id)
 
 
 class FKResponse(SQLModel):
@@ -59,6 +61,7 @@ class ForceTask(SQLModel):
 
 
 class RunRequest(SQLModel):
+    robot_id: str = "ur5"                        # 대상 로봇 (레지스트리 id)
     program_id: str | None = None
     waypoints: list[list[float]] | None = None   # 관절 경유점(rad)
     start: list[float] | None = None             # 프로그램 실행 출발 관절각(현재 자세), 없으면 ready

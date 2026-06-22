@@ -10,12 +10,14 @@
 → sim.run_simulation(waypoints, ..., plant=plant, ctrl=ctrl) 로 넘겨 쓴다.
 """
 import numpy as np
-from app.sim import MODEL
 
 
-def build_models(payload=0.0, model_scale=1.0):
-    """(plant, ctrl) 모델 쌍을 만든다. payload=0·scale=1 이면 둘 다 공칭(이상적)."""
-    MLIST, GLIST, SLIST = MODEL
+def build_models(dyn_args, payload=0.0, model_scale=1.0):
+    """(plant, ctrl) 모델 쌍을 만든다. payload=0·scale=1 이면 둘 다 공칭(이상적).
+
+    dyn_args = (Mlist, Glist, Slist) — 대상 로봇의 동역학 파라미터(robot.dyn_args).
+    """
+    MLIST, GLIST, SLIST = dyn_args
 
     plant_G = [np.array(g, dtype=float) for g in GLIST]
     if payload:                                   # 점질량 → 마지막 링크 병진관성에 추가

@@ -315,6 +315,34 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 
 ---
 
+## 2026-06-22
+
+### 🤖 멀티로봇 Phase 4 — sim·controllers RobotModel 파라미터화 (branch `multirobot`)
+
+엔진은 이미 generic 이었고(Mlist/Glist/Slist 인자·numba n-무관), 빠진 '마지막 1마일'인
+실제 시뮬 경로의 UR5 하드코딩을 제거했다. 이제 `robot_id` 로 등록된 어떤 로봇이든 같은
+엔진으로 시뮬된다.
+
+- **`sim.py`**: 전역 `N`·`MODEL` 제거 → `run_simulation(..., robot=None)` 으로 RobotModel
+  주입. 모든 `_run_*`·헬퍼(`_build_ref`/`_make_ref`/`_wall_contact`/`_blowup_event`/`_empty_result`)
+  가 `robot.fk/jacobian_body/dls_inv/n/dyn_args/gravity` 를 쓴다. 각 러너 상단에 `N=robot.n`
+  로컬 바인딩(클로저가 캡처) → 본문 거의 무수정. `robot=None` 이면 레지스트리 UR5 폴백
+  (데모/하위호환). `warmup()` 도 레지스트리 UR5 기준.
+- **`controllers/simulate`·`kinematics`**: `registry.get_robot(req.robot_id)` 해석(미등록 404),
+  `robot.ready/ik/fk/manipulability` 로 일반화. **`realism.build_models(dyn_args, ...)`** 시그니처
+  변경으로 `sim.MODEL` 의존 제거.
+- **`robot_registry`**: UR5 는 검증된 `ur5_model` 상수로 즉시 빌드(URDF 추출과 1e-11 일치·
+  네트워크 불필요·기존 수치 비트일치), iiwa/panda 는 지연 URDF. **`schemas`** 3종(Run/IK/FK)에
+  `robot_id="ur5"` 추가(프론트 미전송 시 UR5 기본 → 완전 하위호환).
+- **검증(TestClient)**: UR5 회귀 무손상 — computed_torque sse **2.4e-9** · force **F_ss 20.000N** ·
+  σ_min **0.2247**(READY) · resolved_rate 6.1e-7 · impedance 1.2e-3. **panda 7-DOF
+  computed_torque sse 1.8e-9 정상 시뮬**(같은 엔진 n-무관 실증). 미등록 robot_id → 404.
+  parity pytest **7 passed**.
+- 남은 것: **프론트 로봇 셀렉터 + 로봇별 메시 서빙**(현재 프론트는 robot_id 미전송 → ur5 동작),
+  이후 URDF 업로드 · 7-DOF 널공간 제어.
+
+---
+
 ## 📋 다음 할 것 (TODO)
 
 - [~] **멀티로봇** — ⭐엔진 generic(numba n-무관). [x] **Phase 1: URDF 추출기**(`urdf_loader.py`,
@@ -323,7 +351,8 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
       — UR5 상수 모델이 ur5_model 함수와 diff 0, URDF 로드 panda/iiwa IK 왕복 OK.
       [x] **Phase 3 레지스트리 + `/api/robots`**(`robot_registry.py`·`routers/robots.py`) ✅ 2026-06-19
       — ur5/iiwa14/panda 지연로딩·캐시, 목록+상세(관절·한계·ready TCP). yourdfpy→main dep.
-      [ ] sim·controllers 파라미터화(전역 ur5 49곳) → [ ] 프론트 셀렉터 + 로봇별 메시
+      [x] **Phase 4 sim·controllers 파라미터화**(`robot_id`·RobotModel 주입, panda 7-DOF
+      검증) ✅ 2026-06-22 → [ ] 프론트 셀렉터 + 로봇별 메시
       → [ ] URDF 업로드. (7-DOF 널공간 제어도)
 - [x] **속도제어**(관절 θ̇_d / 직교 resolved-rate `J†`) ✅ 2026-06-18
       └ **순수 토크 입력 모드**(§11.4)는 τ 입력 스키마 필요 → 보류
