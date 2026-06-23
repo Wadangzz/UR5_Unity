@@ -404,6 +404,34 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 
 ---
 
+## 2026-06-23
+
+### 🌀 컨투어 Step 4 — CAD/메시 import (STL/OBJ) + UI 정리 (branch `mesh-contour`)
+
+해석적 곡면(평면/원기둥/구)을 넘어 **임의 업로드 메시**를 컨투어 표면으로. 제어는 §11.6
+그대로 — `_make_surface` 에 메시 쿼리 1종만 추가(최근접점·법선). 곡면 분기와 동일 인터페이스.
+
+- **백엔드**: `mesh_store.py`(인메모리 STL/OBJ 레지스트리, trimesh, `fix_normals`, >5000면
+  best-effort 단순화) + `routers/mesh.py`(`POST /api/mesh` → `{mesh_id,n_faces,extents}`).
+  `_make_surface` 의 `shape='mesh'`: `ProximityQuery.on_surface` 최근접점 + **정점법선 바리센트릭
+  보간**으로 연속 법선장(면 경계 chatter 방지). `_run_hybrid` 은 메시면 Radau 허용오차 완화
+  (rtol 2e-3) + surf 쿼리 1회 재사용(힘·투영 공용). `schemas.ForceTask` 에 mesh_id/pos/quat/scale.
+- **프론트**: `api.uploadMesh`(multipart) + `ForceTask` mesh 필드. `ControlPanel` 표면에 메시 추가
+  (파일 업로드 + 스케일 슬라이더). `root` `computeMeshPlacement` — **자동배치**: bbox 중심을 시작
+  도구축 앞 (gap+두께/2) 에 둠(곡면 자동배치와 같은 원리). 백엔드가 같은 mesh_pos/quat 를 raw
+  메시에 적용 → **렌더·시뮬 정확히 일치**. `UploadedMesh`(STL/OBJ 로컬 렌더 + 클릭해 경로 그리기).
+- **의존성 정리**: `trimesh[easy]` 전이→직접 명시(코드가 직접 import). `fast-simplification` 추가.
+- **버그 잡음**: >5000면 메시 업로드가 `fast_simplification` 미설치로 400 → 단순화 `try/except`
+  폴백(없어도 업로드 성공) + 의존성 추가. (구 1280면·박스 검증은 이 분기를 안 타 통과했었음.)
+- **UI 정리**: "접선 이동(move_len)" 슬라이더 제거 — 점찍기(force_path)가 일반형, 미지정 시
+  백엔드 기본 직선 한 획(폴백 유지). 하이브리드 흐름 = 표면 선택→(메시 업로드)→점찍기→Run.
+- **검증**: 회귀 plane/cyl/sphere 20N·발산없음, **mesh(구) 20.001N = 해석 sphere 일치**,
+  off-center 박스 19.992N(중심오프셋 보정 정확), parity pytest 7, tsc/eslint/build clean,
+  라이브 서버 업로드 200·wavy 6962면 OK.
+- 남은 것: STEP→메시 변환(CAD), 7-DOF 널공간.
+
+---
+
 ## 📋 다음 할 것 (TODO)
 
 - [~] **멀티로봇** — ⭐엔진 generic(numba n-무관). [x] **Phase 1: URDF 추출기**(`urdf_loader.py`,

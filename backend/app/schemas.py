@@ -47,8 +47,13 @@ class ForceTask(SQLModel):
     만 보내고, 표면 기하(point/normal·center/axis)는 백엔드가 시작자세 FK 로 계산해 채운다."""
     fd: float = 20.0                             # 목표 누름힘(N)
     gap: float = 0.05                            # 시작 시 표면까지 거리(m)
-    shape: str = "plane"                         # plane | cylinder | sphere (컨투어)
+    shape: str = "plane"                         # plane | cylinder | sphere | mesh (컨투어)
     radius: float = 0.08                         # 곡면 반경(m, cylinder/sphere)
+    # mesh 표면(업로드 모델): id + 배치 transform(프론트 TransformControls). base 에서 적용.
+    mesh_id: str = ""                            # mesh_store 의 업로드 메시 id
+    mesh_pos: list[float] = [0.0, 0.0, 0.0]      # 배치 위치(base)
+    mesh_quat: list[float] = [0.0, 0.0, 0.0, 1.0]  # 배치 회전(쿼터니언 xyzw)
+    mesh_scale: float = 1.0                      # 배치 스케일(균일)
     k_env: float = 4000.0                        # 표면 강성(N/m)
     b_env: float = 40.0                          # 표면 감쇠(N·s/m)
     # 누르는 방향은 EE 도구축(시작자세 기준)으로 잡는다 — 엔드이펙터가 보는 쪽으로 누름.

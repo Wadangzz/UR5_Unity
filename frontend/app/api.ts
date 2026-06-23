@@ -157,8 +157,20 @@ export interface ForceTask {
   fd: number; // 목표 누름힘(N)
   gap: number; // 시작 시 표면까지 거리(m)
   move_len: number; // 접선 이동거리(m, 하이브리드 단일획)
-  shape: string; // plane | cylinder | sphere (컨투어)
+  shape: string; // plane | cylinder | sphere | mesh (컨투어)
   radius: number; // 곡면 반경(m, cylinder/sphere)
+  // 업로드 메시 표면(shape='mesh'): id + 배치 transform(프론트가 EE 자세로 자동 계산)
+  mesh_id?: string;
+  mesh_pos?: number[]; // 배치 위치(base)
+  mesh_quat?: number[]; // 배치 회전(쿼터니언 xyzw)
+  mesh_scale?: number; // 배치 스케일(균일)
+}
+
+// 메시 업로드 응답 (mesh_store 가 부여한 id + 면수·치수)
+export interface MeshUploadResponse {
+  mesh_id: string;
+  n_faces: number;
+  extents: number[]; // 로컬 AABB 치수 [ex,ey,ez](m)
 }
 
 export interface RunRequest {
@@ -254,6 +266,13 @@ export const getRobotDetail = (id: string) =>
 
 export const runSimulation = (req: RunRequest) =>
   http.post<RunResponse>('/run', req).then((r) => r.data);
+
+// 메시(STL/OBJ) 업로드 → 백엔드 인메모리 저장 후 mesh_id 반환 (하이브리드 컨투어 표면)
+export const uploadMesh = (file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  return http.post<MeshUploadResponse>('/mesh', form).then((r) => r.data);
+};
 
 // robotId 미지정 시 robot_id 생략 → 백엔드 기본 ur5 (하위호환)
 export const fk = (theta: number[], robotId?: string) =>

@@ -627,11 +627,36 @@ def _wall_contact(n, p_w, k_env, b_env, robot):
 def _make_surface(ft):
     """force_task 표면 사양 → surface(p) → (n 외향단위법선, δ 침투깊이, p_proj 표면투영).
 
-    shape: 'plane'(기본) | 'cylinder' | 'sphere'. 곡면은 법선 n(p)가 위치종속
+    shape: 'plane'(기본) | 'cylinder' | 'sphere' | 'mesh'. 곡면은 법선 n(p)가 위치종속
     (MR §11.6 의 구속 A(θ)) — 제어식(투영 P)은 동일하고 매 스텝 접촉점 법선만 다르게
     들어간다. 침투 δ = max(0, R−거리): EE 가 표면 안으로 들어간 깊이. δ̇=−n·ṗ(호출측).
+    mesh 는 임의 모델(trimesh): 최근접점·면법선으로 동일 인터페이스 제공(컨트롤러가
+    ft['_pq']=ProximityQuery, ft['_mesh']=배치된 trimesh 를 실어 보낸다).
     """
     shape = ft.get("shape", "plane")
+    if shape == "mesh":
+        import trimesh                                # 보간용(점→바리센트릭)
+        mesh = ft["_mesh"]                            # 배치(transform 적용)된 trimesh
+        pq = ft["_pq"]                               # trimesh ProximityQuery(BVH 캐시)
+        faces, verts = mesh.faces, mesh.vertices
+        vnorm, fnorm = mesh.vertex_normals, mesh.face_normals
+
+        def surf(p):
+            # 면 법선은 면을 넘을 때 불연속(힘 chatter) → 정점법선을 바리센트릭 보간해
+            # 매끄러운 법선장을 만든다(해석적 곡면처럼 연속).
+            p = np.asarray(p, float)
+            cp, _, tri = pq.on_surface(p.reshape(1, 3))   # 최근접 표면점·삼각형
+            cp, ti = cp[0], int(tri[0])
+            tri_v = verts[faces[ti]]                 # 3×3 삼각형 정점
+            bary = trimesh.triangles.points_to_barycentric(
+                tri_v.reshape(1, 3, 3), cp.reshape(1, 3))[0]
+            n = (bary[:, None] * vnorm[faces[ti]]).sum(0)
+            nn = float(np.linalg.norm(n))
+            n = n / nn if nn > 1e-9 else fnorm[ti]
+            signed = float((p - cp) @ n)             # >0 표면 밖, <0 침투
+            return n, max(0.0, -signed), cp
+
+        return surf
     if shape == "sphere":
         c = np.asarray(ft.get("center", [0.0, 0.0, 0.0]), float)
         R = float(ft.get("radius", 0.1))
@@ -889,7 +914,7 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
         Vb = Jb @ dth
         M = df.mass_matrix(th, Mp, Gp, Sp)
         Linv = Jb @ np.linalg.solve(M, Jb.T)         # Λ⁻¹ = Jb M⁻¹ Jbᵀ
-        nl = surf(X[:3, 3])[0]                        # 접촉점 표면 법선(위치종속)
+        nl, delta, _ = surf(X[:3, 3])                 # 접촉점 법선·침투(쿼리 1회, 투영+힘 공용)
         nb = R.T @ nl                                 # body 프레임 법선(단위)
 
         # 투영행렬 P (식 11.60): A=[0 0 0 | nb] 법선 운동 구속
@@ -906,8 +931,13 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
         Lam = np.linalg.inv(Linv)
         W_motion = Lam @ a_motion
 
-        # 힘 부분공간: PI 힘 + 법선 감쇠 (누름 = −nb)
-        f_meas, delta, F_env = contact(th, dth)
+        # 힘 부분공간: PI 힘 + 법선 감쇠 (누름 = −nb). surf 재사용(쿼리 절약).
+        if delta > 0.0:
+            ddelta = -float(nl @ (R @ Vb[3:6]))       # 침투 속도(δ̇=−n·ṗ)
+            f_meas = max(0.0, k_env * delta + b_env * ddelta)
+        else:
+            f_meas = 0.0
+        F_env = nl * f_meas
         fe = fd - f_meas
         vn = float(nb @ Vb[3:6])                      # 법선 속도(body)
         W_force = -nb * (fd + Kfp * fe + Kfi * Ie) - Kfd * vn * nb
@@ -923,8 +953,10 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
 
     x0 = np.concatenate([WP[0], np.zeros(N), [0.0], np.zeros(6)])
     t_eval = np.linspace(0, t_end, int(t_end * hz) + 1)
+    # 메시는 면 보간 법선의 미세 꺾임에 적응솔버가 스텝을 잘게 쪼개므로 허용오차 완화.
+    rtol, atol = (2e-3, 1e-5) if ft.get("shape") == "mesh" else (1e-4, 1e-7)
     sol = solve_ivp(rhs, (0, t_end), x0, t_eval=t_eval, method="Radau",
-                    rtol=1e-4, atol=1e-7, events=_blowup_event(N))
+                    rtol=rtol, atol=atol, events=_blowup_event(N))
 
     TH, DTH = sol.y[:N].T, sol.y[N:2 * N].T
     fmeas, ferr, tan_pos, tan_des, tcp_des = [], [], [], [], []

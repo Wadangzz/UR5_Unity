@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app import sim
 from app.db import init_db
 from app.meshes_setup import MESHES_DIR, prepare_meshes
-from app.routers import kinematics, programs, robot, robots, simulate
+from app.routers import kinematics, mesh, programs, robot, robots, simulate
 
 app = FastAPI(title="UR5 Web Simulator", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
@@ -20,7 +20,7 @@ init_db()                                   # 테이블 생성 (멱등)
 prepare_meshes()                            # URDF + 메시를 app/meshes/ 로 복사 (멱등)
 sim.warmup()                                # numba RNE JIT 사전 컴파일 (첫 요청 지연 방지)
 
-for module in (robot, kinematics, programs, simulate, robots):
+for module in (robot, kinematics, programs, simulate, robots, mesh):
     app.include_router(module.router)
 
 # URDF + 메시 정적 서빙 (urdf-loader 가 /meshes/... 로 로드)

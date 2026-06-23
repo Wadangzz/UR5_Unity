@@ -47,11 +47,14 @@ interface Props {
     move_len: number;
     shape: string;
     radius: number;
+    mesh_scale: number;
   };
   onForceTaskChange: (
-    key: 'fd' | 'gap' | 'move_len' | 'radius' | 'shape',
+    key: 'fd' | 'gap' | 'move_len' | 'radius' | 'shape' | 'mesh_scale',
     value: number | string,
   ) => void;
+  onMeshUpload: (file: File) => void;
+  meshInfo: { n_faces: number; extents: number[] } | null; // 업로드 완료 정보
   push: number[];
   onPushAxisChange: (index: number, value: number) => void;
   onRun: () => void;
@@ -124,6 +127,8 @@ export default function ControlPanel({
   noiseSeed,
   forceTask,
   onForceTaskChange,
+  onMeshUpload,
+  meshInfo,
   push,
   onPushAxisChange,
   onRun,
@@ -263,10 +268,12 @@ export default function ControlPanel({
                     <SelectItem value='plane'>평면 (벽)</SelectItem>
                     <SelectItem value='cylinder'>원기둥</SelectItem>
                     <SelectItem value='sphere'>구</SelectItem>
+                    <SelectItem value='mesh'>메시 (STL/OBJ)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {forceTask.shape !== 'plane' && (
+              {(forceTask.shape === 'cylinder' ||
+                forceTask.shape === 'sphere') && (
                 <div className='space-y-1.5'>
                   <div className='flex items-center justify-between'>
                     <Label className='text-muted-foreground text-xs'>
@@ -283,6 +290,48 @@ export default function ControlPanel({
                     value={[forceTask.radius]}
                     disabled={running}
                     onValueChange={([v]) => onForceTaskChange('radius', v)}
+                  />
+                </div>
+              )}
+              {forceTask.shape === 'mesh' && (
+                <div className='space-y-1.5'>
+                  <Label className='text-muted-foreground text-xs'>
+                    메시 파일
+                  </Label>
+                  <input
+                    type='file'
+                    accept='.stl,.obj'
+                    disabled={running}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onMeshUpload(f);
+                    }}
+                    className='text-muted-foreground file:bg-muted file:text-foreground hover:file:bg-muted/70 w-full text-xs file:mr-2 file:rounded file:border-0 file:px-2 file:py-1 file:text-xs'
+                  />
+                  {meshInfo && (
+                    <p className='text-muted-foreground text-xs tabular-nums'>
+                      {meshInfo.n_faces} 면 ·{' '}
+                      {meshInfo.extents
+                        .map((e) => (e * 100).toFixed(0))
+                        .join('×')}{' '}
+                      cm
+                    </p>
+                  )}
+                  <div className='flex items-center justify-between pt-1'>
+                    <Label className='text-muted-foreground text-xs'>
+                      스케일
+                    </Label>
+                    <span className='text-xs tabular-nums'>
+                      {forceTask.mesh_scale.toFixed(2)}×
+                    </span>
+                  </div>
+                  <Slider
+                    min={0.1}
+                    max={3}
+                    step={0.05}
+                    value={[forceTask.mesh_scale]}
+                    disabled={running || !meshInfo}
+                    onValueChange={([v]) => onForceTaskChange('mesh_scale', v)}
                   />
                 </div>
               )}
@@ -322,26 +371,8 @@ export default function ControlPanel({
                   onValueChange={([v]) => onForceTaskChange('gap', v)}
                 />
               </div>
-              {controller === 'hybrid' && (
-                <div className='space-y-1.5'>
-                  <div className='flex items-center justify-between'>
-                    <Label className='text-muted-foreground text-xs'>
-                      접선 이동 (선 긋기)
-                    </Label>
-                    <span className='text-xs tabular-nums'>
-                      {(forceTask.move_len * 1000).toFixed(0)} mm
-                    </span>
-                  </div>
-                  <Slider
-                    min={0}
-                    max={0.2}
-                    step={0.01}
-                    value={[forceTask.move_len]}
-                    disabled={running}
-                    onValueChange={([v]) => onForceTaskChange('move_len', v)}
-                  />
-                </div>
-              )}
+              {/* 하이브리드 경로는 3D 표면에 점을 찍어 지정(force_path). 경로 미지정 시
+                  백엔드 기본값(move_len)으로 직선 한 획 — 별도 슬라이더 없음. */}
             </div>
           )}
 

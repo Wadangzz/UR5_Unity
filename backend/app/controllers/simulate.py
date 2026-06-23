@@ -1,10 +1,11 @@
 """시뮬레이션 실행 비즈니스 로직 — 로봇 해석 + 프로그램 해석(IK) + 엔진 호출."""
 import numpy as np
+import trimesh
 from fastapi import HTTPException
 from sqlmodel import Session, select
 from app.core import robot_registry as registry
 from app.core.robot_math import SE3
-from app import sim, realism
+from app import sim, realism, mesh_store
 from app.models import Pose
 from app.schemas import RunRequest, ForceTask
 
@@ -48,7 +49,19 @@ def run(req: RunRequest, session: Session):
         push = push / np.linalg.norm(push)
         ft["tangent"] = (R0 @ np.array(ft["tan_axis"], float)).tolist()
         shape = ft.get("shape", "plane")
-        if shape in ("cylinder", "sphere"):
+        if shape == "mesh":
+            # 업로드 메시를 배치 transform(scale→rotate→translate) 적용해 표면모델로.
+            try:
+                base = mesh_store.get(ft["mesh_id"]).copy()
+            except KeyError:
+                raise HTTPException(404, "메시를 먼저 업로드하세요") from None
+            base.apply_scale(float(ft.get("mesh_scale", 1.0)))
+            base.apply_transform(SE3.from_pose(list(ft["mesh_pos"])
+                                               + list(ft["mesh_quat"])))
+            ft["_mesh"] = base
+            ft["_pq"] = trimesh.proximity.ProximityQuery(base)
+            wall = {"shape": "mesh"}              # 프론트는 자기 로컬 파일로 렌더
+        elif shape in ("cylinder", "sphere"):
             radius = float(ft["radius"])
             center = p_start + push * (ft["gap"] + radius)       # 중심 = 표면 뒤
             ft["center"] = center.tolist()

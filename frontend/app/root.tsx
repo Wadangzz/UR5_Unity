@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import {
   OrbitControls,
   Grid,
@@ -8,7 +8,17 @@ import {
   GizmoViewport,
   Line,
 } from '@react-three/drei';
-import { Quaternion, Vector3 } from 'three';
+import {
+  Box3,
+  DoubleSide,
+  Mesh,
+  MeshStandardMaterial,
+  type Object3D,
+  Quaternion,
+  Vector3,
+} from 'three';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import RobotView from '@/components/RobotView';
 import WallPlane from '@/components/WallPlane';
 import ControlPanel from '@/components/ControlPanel';
@@ -29,6 +39,8 @@ import {
   fk,
   getRobots,
   runSimulation,
+  uploadMesh,
+  type ForceTask,
   type JointMeta,
   type RobotSummary,
   type RunRequest,
@@ -66,6 +78,108 @@ function computeSurface(
     point: p.clone().addScaledVector(push, gap).toArray(),
     normal: push.clone().negate().toArray(),
   };
+}
+
+// 업로드 메시(STL/OBJ) — id·로컬 url·로컬 bbox(중심/치수). 배치는 EE 자세로 자동 계산.
+type MeshInfo = {
+  meshId: string;
+  url: string; // object URL (로컬 렌더용)
+  ext: string; // stl | obj
+  center: number[]; // 로컬 bbox 중심
+  size: number[]; // 로컬 bbox 치수
+  n_faces: number;
+  extents: number[];
+};
+
+// STL/OBJ → three Object3D (geometry 만, 재질은 호출측). bbox·렌더 공용.
+function loadMeshObject(url: string, ext: string): Promise<Object3D> {
+  return new Promise((resolve, reject) => {
+    if (ext === 'obj') {
+      new OBJLoader().load(url, resolve, undefined, reject);
+    } else {
+      new STLLoader().load(
+        url,
+        (geo) => resolve(new Mesh(geo)),
+        undefined,
+        reject,
+      );
+    }
+  });
+}
+
+// EE 자세 + gap + 스케일 → 메시 배치(pos/quat). 곡면 자동배치와 같은 원리:
+// bbox 중심을 도구축 앞 (gap + 두께/2) 에 둬 가까운 면이 gap 거리에 서게 한다.
+// 백엔드도 같은 mesh_pos/quat 를 raw 메시에 적용하므로 렌더·시뮬이 정확히 일치.
+function computeMeshPlacement(
+  pose: number[],
+  gap: number,
+  scale: number,
+  info: MeshInfo,
+): { pos: number[]; quat: number[] } {
+  const p = new Vector3(pose[0], pose[1], pose[2]);
+  const q = new Quaternion(pose[3], pose[4], pose[5], pose[6]);
+  const push = new Vector3(0, 0, 1).applyQuaternion(q).normalize();
+  const halfZ = (info.size[2] / 2) * scale;
+  const target = p.clone().addScaledVector(push, gap + halfZ);
+  const c = new Vector3(...info.center)
+    .multiplyScalar(scale)
+    .applyQuaternion(q);
+  return { pos: target.sub(c).toArray(), quat: [q.x, q.y, q.z, q.w] };
+}
+
+// 업로드 메시를 Z-up 씬에 반투명 렌더. 하이브리드면 클릭해 경로 그리기(world 교점).
+function UploadedMesh({
+  info,
+  pos,
+  quat,
+  scale,
+  onDraw,
+}: {
+  info: MeshInfo;
+  pos: number[];
+  quat: number[];
+  scale: number;
+  onDraw?: (p: number[]) => void;
+}) {
+  const [obj, setObj] = useState<Object3D | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadMeshObject(info.url, info.ext)
+      .then((o) => {
+        if (cancelled) return;
+        const mat = new MeshStandardMaterial({
+          color: '#3b82f6',
+          transparent: true,
+          opacity: 0.3,
+          side: DoubleSide,
+        });
+        o.traverse((c) => {
+          if (c instanceof Mesh) c.material = mat;
+        });
+        setObj(o);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [info.url, info.ext]);
+  if (!obj) return null;
+  return (
+    <primitive
+      object={obj}
+      position={pos}
+      quaternion={quat}
+      scale={scale}
+      onClick={
+        onDraw
+          ? (e: ThreeEvent<MouseEvent>) => {
+              e.stopPropagation();
+              onDraw([e.point.x, e.point.y, e.point.z]);
+            }
+          : undefined
+      }
+    />
+  );
 }
 
 // 사용자가 표면에 찍은 경로 점(빨강 구) + 잇는 선
@@ -115,15 +229,46 @@ export default function App() {
     fd: 20,
     gap: 0.05,
     move_len: 0.1,
-    shape: 'plane', // plane | cylinder | sphere (컨투어)
+    shape: 'plane', // plane | cylinder | sphere | mesh (컨투어)
     radius: 0.08, // 곡면 반경(m)
+    mesh_scale: 1, // 업로드 메시 배치 스케일
   });
   const setForceTaskField = (
-    key: 'fd' | 'gap' | 'move_len' | 'radius' | 'shape',
+    key: 'fd' | 'gap' | 'move_len' | 'radius' | 'shape' | 'mesh_scale',
     value: number | string,
   ) => {
     setForceTask((prev) => ({ ...prev, [key]: value }));
     if (key === 'shape') setDrawnPath([]); // 표면 바뀌면 그린 경로 무효
+  };
+  // 업로드 메시 + 그 배치(현재 자세 기준 자동 계산). 메시 컨투어 표면.
+  const [meshInfo, setMeshInfo] = useState<MeshInfo | null>(null);
+  const [meshPlacement, setMeshPlacement] = useState<{
+    pos: number[];
+    quat: number[];
+  } | null>(null);
+  const onMeshUpload = async (file: File) => {
+    try {
+      const res = await uploadMesh(file); // 백엔드 저장 → mesh_id
+      const url = URL.createObjectURL(file); // 로컬 렌더용
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'stl';
+      const box = new Box3().setFromObject(await loadMeshObject(url, ext));
+      const c = new Vector3();
+      const s = new Vector3();
+      box.getCenter(c);
+      box.getSize(s);
+      setMeshInfo({
+        meshId: res.mesh_id,
+        url,
+        ext,
+        center: c.toArray(),
+        size: s.toArray(),
+        n_faces: res.n_faces,
+        extents: res.extents,
+      });
+      setDrawnPath([]); // 새 메시 → 이전 경로 무효
+    } catch (e) {
+      console.error(e);
+    }
   };
   // 하이브리드 컨투어: 표면 미리보기(현재 자세 기준) + 표면에 그린 경로 점
   const [previewWall, setPreviewWall] = useState<Wall | null>(null);
@@ -186,24 +331,41 @@ export default function App() {
   }, []);
 
   // 힘/하이브리드 설정 중: 현재 자세 기준 표면 미리보기 (그리기 타깃). 디바운스.
+  // 메시는 미리보기 대신 배치(pos/quat)를 계산. 재생 중엔 마지막 값을 동결(렌더 유지).
   useEffect(() => {
     const isForce = controller === 'force' || controller === 'hybrid';
-    if (running || !isForce || joints.length === 0) {
+    if (!isForce || joints.length === 0) {
       setPreviewWall(null);
+      setMeshPlacement(null);
       return;
     }
+    if (running) return; // 재생 중엔 직전 미리보기/배치 유지
     const id = setTimeout(() => {
       fk(joints, robotId)
-        .then((r) =>
-          setPreviewWall(
-            computeSurface(
-              r.pose,
-              forceTask.shape,
-              forceTask.gap,
-              forceTask.radius,
-            ),
-          ),
-        )
+        .then((r) => {
+          if (forceTask.shape === 'mesh') {
+            setPreviewWall(null);
+            if (meshInfo)
+              setMeshPlacement(
+                computeMeshPlacement(
+                  r.pose,
+                  forceTask.gap,
+                  forceTask.mesh_scale,
+                  meshInfo,
+                ),
+              );
+          } else {
+            setMeshPlacement(null);
+            setPreviewWall(
+              computeSurface(
+                r.pose,
+                forceTask.shape,
+                forceTask.gap,
+                forceTask.radius,
+              ),
+            );
+          }
+        })
         .catch(() => {});
     }, 150);
     return () => clearTimeout(id);
@@ -213,6 +375,8 @@ export default function App() {
     forceTask.shape,
     forceTask.gap,
     forceTask.radius,
+    forceTask.mesh_scale,
+    meshInfo,
     robotId,
     running,
   ]);
@@ -300,13 +464,30 @@ export default function App() {
   };
   // 힘/하이브리드는 현재 자세에서 누름(출발=현재). 하이브리드+그린경로면 컨투어 추종.
   const isForceCtrl = controller === 'force' || controller === 'hybrid';
+  // 메시 표면이면 업로드 id + 자동배치(현재 자세 기준)를 force_task 에 실어 보낸다.
+  const buildForceTask = (): ForceTask => {
+    if (forceTask.shape === 'mesh' && meshInfo && meshPlacement) {
+      return {
+        ...forceTask,
+        mesh_id: meshInfo.meshId,
+        mesh_pos: meshPlacement.pos,
+        mesh_quat: meshPlacement.quat,
+      };
+    }
+    return forceTask;
+  };
   const run = () => {
+    const ft = buildForceTask();
     if (controller === 'hybrid' && drawnPath.length > 0) {
-      runReq({ waypoints: [[...joints]], force_path: drawnPath });
+      runReq({
+        waypoints: [[...joints]],
+        force_path: drawnPath,
+        force_task: ft,
+      });
     } else {
       runReq(
         isForceCtrl
-          ? { waypoints: [[...joints]] }
+          ? { waypoints: [[...joints]], force_task: ft }
           : { waypoints: [ready, [...joints]] },
       );
     }
@@ -324,19 +505,27 @@ export default function App() {
         <p className='text-muted-foreground text-sm'>
           react-three-fiber · urdf-loader · FastAPI
         </p>
-        <Link
-          to='/slides'
-          className='text-primary pointer-events-auto mt-1 inline-block text-sm hover:underline'
-        >
-          📊 발표자료 →
-        </Link>
       </header>
+
+      {/* 발표자료 링크 — 우하단(상단은 패널에 가려짐) */}
+      <Link
+        to='/slides'
+        className='bg-card/95 supports-[backdrop-filter]:bg-card/80 text-primary pointer-events-auto absolute right-4 bottom-4 z-20 inline-block rounded-lg border px-3 py-1.5 text-sm shadow-sm backdrop-blur hover:underline'
+      >
+        📊 발표자료 →
+      </Link>
 
       {/* 로봇 선택 (멀티로봇) — 상단 중앙. 바꾸면 메시·기구학·동역학이 그 로봇으로 전환 */}
       <div className='absolute top-4 left-1/2 z-20 -translate-x-1/2'>
         <div className='bg-card/95 supports-[backdrop-filter]:bg-card/80 flex items-center gap-2 rounded-lg border px-3 py-1.5 shadow-sm backdrop-blur'>
-          <span className='text-muted-foreground text-xs font-medium'>로봇</span>
-          <Select value={robotId} onValueChange={onRobotChange} disabled={running}>
+          <span className='text-muted-foreground text-xs font-medium'>
+            로봇
+          </span>
+          <Select
+            value={robotId}
+            onValueChange={onRobotChange}
+            disabled={running}
+          >
             <SelectTrigger size='sm' className='w-44 border-0 bg-transparent'>
               <SelectValue placeholder='로봇 선택' />
             </SelectTrigger>
@@ -407,6 +596,8 @@ export default function App() {
           noiseSeed={noiseSeed}
           forceTask={forceTask}
           onForceTaskChange={setForceTaskField}
+          onMeshUpload={onMeshUpload}
+          meshInfo={meshInfo}
           push={push}
           onPushAxisChange={setPushAxis}
           onRun={run}
@@ -474,6 +665,18 @@ export default function App() {
             !running && controller === 'hybrid' ? addDrawPoint : undefined
           }
         />
+        {/* 업로드 메시 표면 (shape='mesh'). 자동배치, 하이브리드면 클릭해 경로 그리기 */}
+        {forceTask.shape === 'mesh' && meshInfo && meshPlacement && (
+          <UploadedMesh
+            info={meshInfo}
+            pos={meshPlacement.pos}
+            quat={meshPlacement.quat}
+            scale={forceTask.mesh_scale}
+            onDraw={
+              !running && controller === 'hybrid' ? addDrawPoint : undefined
+            }
+          />
+        )}
         <DrawnPath points={drawnPath} />
 
         {/* 로봇 베이스 프레임 좌표축 (Z-up: X 빨강·Y 초록·Z 파랑) */}
