@@ -22,6 +22,7 @@ VEL_TOL = 0.02          # 정상상태(평형) 판정 속도 임계 rad/s
 VEL_WIN = 0.2           # 그 속도 이하를 유지해야 하는 윈도우 s
 THETA_MAX = 3 * np.pi   # 발산 안전망: 위치(rad), 오버슛보다 큼
 OMEGA_MAX = 20.0        # 발산 안전망: 속도(rad/s), 정상 ~2 보다 큼
+KD_NULL = 5.0           # 널공간 감쇠(여유 DOF) — 7-DOF 내부 드리프트 방지
 
 VELOCITY_CONTROLLERS = ("joint_velocity", "resolved_rate")
 
@@ -913,7 +914,8 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
         Jb = robot.jacobian_body(th)
         Vb = Jb @ dth
         M = df.mass_matrix(th, Mp, Gp, Sp)
-        Linv = Jb @ np.linalg.solve(M, Jb.T)         # Λ⁻¹ = Jb M⁻¹ Jbᵀ
+        Minv = np.linalg.inv(M)
+        Linv = Jb @ Minv @ Jb.T                       # Λ⁻¹ = Jb M⁻¹ Jbᵀ
         nl, delta, _ = surf(X[:3, 3])                 # 접촉점 법선·침투(쿼리 1회, 투영+힘 공용)
         nb = R.T @ nl                                 # body 프레임 법선(단위)
 
@@ -946,6 +948,10 @@ def _run_hybrid(WP, gains, hz, plant, force_task, robot):
         c = df.coriolis_forces(th, dth, Mp, Gp, Sp)
         g = df.gravity_forces(th, robot.gravity, Mp, Gp, Sp)
         tau = Jb.T @ (P @ W_motion + (np.eye(6) - P) @ W_force) + c + g
+        # 널공간 감쇠(여유 DOF): 동역학일관 투영 N=I−Jbᵀ(Λ Jb M⁻¹) 으로 task
+        # 무영향, 여유관절 속도만 감쇠. 7-DOF 드리프트 방지(6-DOF 는 N≈0).
+        JbarT = Lam @ Jb @ Minv                       # 동역학일관 J̄ᵀ = Λ Jb M⁻¹
+        tau = tau + (np.eye(N) - Jb.T @ JbarT) @ (-KD_NULL * dth)
         Ftip_b = np.concatenate([np.zeros(3), R.T @ (-F_env)])   # MR 규약(−반력)
         ddth = df.forward_dynamics(th, dth, tau, robot.gravity, Ftip_b, Mp, Gp, Sp)
         dIe = fe if delta > 0.0 else 0.0

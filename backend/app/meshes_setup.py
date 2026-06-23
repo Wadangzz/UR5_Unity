@@ -28,6 +28,7 @@ _ROBOT_DESC = {
     "ur5": "ur5_description",
     "iiwa14": "iiwa14_description",
     "panda": "panda_description",
+    "omx": "open_manipulator_x_description",
 }
 
 # 레거시 /api/robot (UR5 단일) 호환용 package 이름
@@ -63,12 +64,18 @@ def _prepare(desc_modname):
     _copy(urdf_src, os.path.join(MESHES_DIR, *urdf_rel.split("/")))
 
     # URDF 가 참조하는 모든 메시 복사 + package 이름 수집
+    # 메시 패키지 dir 위치는 repo마다 다르다: REPOSITORY_PATH 의 부모에 평평하게 있거나
+    # (panda/iiwa14), repo 안에 중첩돼 있다(open_manipulator/open_manipulator_description).
+    # 두 후보 부모를 순서대로 시도해 실제 파일이 있는 곳에서 복사한다.
+    parents = (pkg_parent, desc.REPOSITORY_PATH)
     pkgs = set()
     for pkg, rel in _MESH_RE.findall(urdf_text):
-        src = os.path.join(pkg_parent, pkg, *rel.split("/"))
-        if os.path.exists(src):
-            _copy(src, os.path.join(MESHES_DIR, pkg, *rel.split("/")))
-            pkgs.add(pkg)
+        for parent in parents:
+            src = os.path.join(parent, pkg, *rel.split("/"))
+            if os.path.exists(src):
+                _copy(src, os.path.join(MESHES_DIR, pkg, *rel.split("/")))
+                pkgs.add(pkg)
+                break
 
     packages = {p: f"/meshes/{p}" for p in pkgs}
     return "/meshes/" + urdf_rel, packages

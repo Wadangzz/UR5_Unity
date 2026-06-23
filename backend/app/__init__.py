@@ -1,1 +1,1 @@
-"""UR5 Web Simulator — FastAPI 백엔드 패키지."""
+"""Robot Web Simulator — FastAPI 백엔드 패키지."""

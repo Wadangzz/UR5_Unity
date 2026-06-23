@@ -11,10 +11,13 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import katex from 'katex';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import RobotView from '@/components/RobotView';
 import mrCover from '@/assets/modern_robotics.png';
 import fkImg from '@/assets/fk_image.png';
+import deltaImg from '@/assets/delta.png';
+import scaraImg from '@/assets/scara.png';
+import screwImg from '@/assets/screw.png';
+import { useSim } from '@/store';
 import type { JointMeta } from '@/api';
 
 /* ── 수식 (KaTeX) ── */
@@ -207,7 +210,6 @@ function RobotFigure({
 }
 
 /* ── SVG 도식 (raw) ── */
-const SCREW = `<svg viewBox="0 0 190 185" width="210"><line x1="95" y1="172" x2="95" y2="20" stroke="#64748b" stroke-width="2" stroke-dasharray="4 4"/><text x="102" y="28" fill="#64748b" font-size="12">축 S</text><path d="M65,148 C65,134 125,134 125,118 C125,102 65,102 65,86 C65,70 125,70 125,54 C125,40 65,40 65,28" fill="none" stroke="#0284c7" stroke-width="3.5"/><line x1="95" y1="166" x2="95" y2="138" stroke="#059669" stroke-width="3" marker-end="url(#ag)"/><text x="100" y="158" fill="#059669" font-size="12">직진</text><path d="M123,116 A29,10 0 0,1 87,116" fill="none" stroke="#d97706" stroke-width="2" marker-end="url(#aw)"/><text x="127" y="110" fill="#d97706" font-size="12">회전</text></svg>`;
 const MANIP = `<svg viewBox="0 0 340 180" width="330"><ellipse cx="138" cy="98" rx="28" ry="18" transform="rotate(20 138 98)" fill="rgba(52,211,153,.18)" stroke="#059669" stroke-width="2"/><line x1="35" y1="140" x2="78" y2="72" stroke="#64748b" stroke-width="6"/><line x1="78" y1="72" x2="138" y2="98" stroke="#64748b" stroke-width="6"/><rect x="29" y="137" width="12" height="8" fill="#27344d"/><circle cx="78" cy="72" r="4.5" fill="#3b82f6"/><circle cx="138" cy="98" r="4.5" fill="#d97706"/><text x="95" y="166" fill="#059669" font-size="12.5" text-anchor="middle">정상 — 둥근</text><ellipse cx="291" cy="28" rx="7" ry="25" transform="rotate(-53 291 28)" fill="rgba(251,191,36,.18)" stroke="#d97706" stroke-width="2"/><line x1="205" y1="140" x2="248" y2="84" stroke="#64748b" stroke-width="6"/><line x1="248" y1="84" x2="291" y2="28" stroke="#64748b" stroke-width="6"/><rect x="199" y="137" width="12" height="8" fill="#27344d"/><circle cx="248" cy="84" r="4.5" fill="#3b82f6"/><circle cx="291" cy="28" r="4.5" fill="#d97706"/><text x="252" y="166" fill="#d97706" font-size="12.5" text-anchor="middle">특이점 — 납작</text></svg>`;
 const DAMP = `<svg viewBox="0 0 240 150" width="290"><line x1="30" y1="115" x2="225" y2="115" stroke="#27344d"/><line x1="30" y1="25" x2="30" y2="115" stroke="#27344d"/><line x1="30" y1="52" x2="225" y2="52" stroke="#64748b" stroke-dasharray="4 4"/><text x="200" y="47" fill="#64748b" font-size="11">목표</text><path d="M30,115 C70,8 95,72 120,55 C140,45 170,53 225,52" fill="none" stroke="#d97706" stroke-width="2.5"/><path d="M30,115 C80,52 130,52 225,52" fill="none" stroke="#059669" stroke-width="2.5"/><path d="M30,115 C110,92 170,57 225,53" fill="none" stroke="#0284c7" stroke-width="2.5"/><text x="118" y="18" fill="#d97706" font-size="11">ζ&lt;1</text><text x="150" y="42" fill="#059669" font-size="11">ζ=1</text><text x="162" y="78" fill="#0284c7" font-size="11">ζ&gt;1</text></svg>`;
 const MSD = `<svg viewBox="0 0 200 165" width="210"><line x1="20" y1="28" x2="180" y2="28" stroke="#64748b" stroke-width="3"/><path d="M100,28 l-10,12 l20,12 l-20,12 l20,12 l-10,12" fill="none" stroke="#0284c7" stroke-width="2.5"/><line x1="130" y1="28" x2="130" y2="76" stroke="#059669" stroke-width="2.5"/><rect x="124" y="58" width="12" height="18" fill="none" stroke="#059669" stroke-width="2"/><rect x="78" y="92" width="48" height="32" rx="5" fill="rgba(59,130,246,.2)" stroke="#3b82f6" stroke-width="2"/><text x="102" y="113" fill="#0f172a" font-size="13" text-anchor="middle">m</text><text x="60" y="58" fill="#0284c7" font-size="13">K</text><text x="142" y="56" fill="#059669" font-size="13">B</text><line x1="102" y1="124" x2="102" y2="150" stroke="#d97706" stroke-width="2.5" marker-end="url(#aw)"/></svg>`;
@@ -215,7 +217,7 @@ const CHALK = `<svg viewBox="0 0 220 175" width="240"><rect x="150" y="20" width
 const GRAV = `<svg viewBox="0 0 190 150" width="210"><line x1="40" y1="50" x2="40" y2="140" stroke="#27344d" stroke-width="6"/><line x1="40" y1="50" x2="145" y2="50" stroke="#64748b" stroke-width="7"/><circle cx="40" cy="50" r="7" fill="#3b82f6"/><line x1="92" y1="58" x2="92" y2="100" stroke="#d97706" stroke-width="2.5" marker-end="url(#aw)"/><line x1="145" y1="58" x2="145" y2="100" stroke="#d97706" stroke-width="2.5" marker-end="url(#aw)"/><text x="112" y="118" fill="#d97706" font-size="12">중력</text><path d="M30,65 A18,18 0 0,1 28,42" fill="none" stroke="#059669" stroke-width="2" marker-end="url(#ag)"/><text x="6" y="48" fill="#059669" font-size="13">τ</text></svg>`;
 const JOINTS = `<svg viewBox="0 0 330 150" width="330"><line x1="40" y1="120" x2="40" y2="62" stroke="#64748b" stroke-width="7"/><line x1="40" y1="62" x2="108" y2="42" stroke="#64748b" stroke-width="7"/><circle cx="40" cy="62" r="7" fill="#0284c7"/><path d="M60,44 A24,24 0 0,1 66,72" fill="none" stroke="#d97706" stroke-width="2.5" marker-end="url(#aw)"/><text x="58" y="138" fill="#0284c7" font-size="13" text-anchor="middle">회전관절 (R)</text><rect x="205" y="50" width="74" height="22" rx="3" fill="none" stroke="#64748b" stroke-width="3"/><rect x="218" y="55" width="28" height="12" rx="2" fill="rgba(59,130,246,.28)" stroke="#3b82f6" stroke-width="2"/><line x1="250" y1="61" x2="292" y2="61" stroke="#059669" stroke-width="2.5" marker-end="url(#ag)"/><text x="245" y="138" fill="#059669" font-size="13" text-anchor="middle">직동관절 (P)</text></svg>`;
 const ARM6 = `<svg viewBox="0 0 200 178" width="195"><rect x="58" y="160" width="44" height="11" rx="2" fill="#27344d"/><line x1="80" y1="160" x2="80" y2="120" stroke="#64748b" stroke-width="9"/><line x1="80" y1="120" x2="132" y2="80" stroke="#64748b" stroke-width="8"/><line x1="132" y1="80" x2="120" y2="40" stroke="#64748b" stroke-width="7"/><line x1="120" y1="40" x2="152" y2="28" stroke="#64748b" stroke-width="6"/><circle cx="80" cy="120" r="6" fill="#0284c7"/><circle cx="132" cy="80" r="6" fill="#0284c7"/><circle cx="120" cy="40" r="5.5" fill="#0284c7"/><circle cx="152" cy="28" r="5" fill="#d97706"/><text x="160" y="24" fill="#d97706" font-size="11">손끝</text></svg>`;
-const IK2 = `<svg viewBox="0 0 240 180" width="245"><rect x="34" y="150" width="14" height="9" fill="#27344d"/><circle cx="182" cy="68" r="6" fill="#d97706"/><text x="190" y="64" fill="#d97706" font-size="12">목표</text><line x1="41" y1="150" x2="148" y2="58" stroke="#0284c7" stroke-width="5"/><line x1="148" y1="58" x2="182" y2="68" stroke="#0284c7" stroke-width="5"/><circle cx="148" cy="58" r="5" fill="#3b82f6"/><line x1="41" y1="150" x2="118" y2="138" stroke="#059669" stroke-width="4" stroke-dasharray="6 4"/><line x1="118" y1="138" x2="182" y2="68" stroke="#059669" stroke-width="4" stroke-dasharray="6 4"/><circle cx="118" cy="138" r="5" fill="#059669"/><text x="58" y="98" fill="#0284c7" font-size="12">해1 (팔꿈치 위)</text><text x="92" y="166" fill="#059669" font-size="12">해2 (팔꿈치 아래)</text></svg>`;
+const IK2 = `<svg viewBox="0 0 240 180" width="245"><rect x="43" y="150" width="14" height="9" fill="#27344d"/><circle cx="175" cy="75" r="6" fill="#d97706"/><text x="183" y="71" fill="#d97706" font-size="12">목표</text><line x1="50" y1="150" x2="90" y2="75" stroke="#0284c7" stroke-width="5"/><line x1="90" y1="75" x2="175" y2="75" stroke="#0284c7" stroke-width="5"/><circle cx="90" cy="75" r="5" fill="#3b82f6"/><line x1="50" y1="150" x2="135" y2="150" stroke="#059669" stroke-width="4" stroke-dasharray="6 4"/><line x1="135" y1="150" x2="175" y2="75" stroke="#059669" stroke-width="4" stroke-dasharray="6 4"/><circle cx="135" cy="150" r="5" fill="#059669"/><text x="36" y="64" fill="#0284c7" font-size="12">해1 (팔꿈치 위)</text><text x="118" y="172" fill="#059669" font-size="12">해2 (팔꿈치 아래)</text></svg>`;
 const QUINTIC = `<svg viewBox="0 0 230 160" width="270"><line x1="28" y1="130" x2="214" y2="130" stroke="#27344d"/><line x1="28" y1="22" x2="28" y2="130" stroke="#27344d"/><path d="M28,128 C95,128 110,40 186,40 L210,40" fill="none" stroke="#0284c7" stroke-width="2.5"/><path d="M28,128 Q107,46 186,128" fill="none" stroke="#d97706" stroke-width="2.5"/><text x="138" y="36" fill="#0284c7" font-size="11">위치 s(t)</text><text x="86" y="70" fill="#d97706" font-size="11">속도 ṡ(t)</text><text x="14" y="22" fill="#64748b" font-size="11">1</text><text x="183" y="145" fill="#64748b" font-size="11">T</text><text x="24" y="145" fill="#64748b" font-size="11">0</text></svg>`;
 
 type S = {
@@ -356,12 +358,17 @@ const SLIDES: S[] = [
               ]}
             />
             <Ex>
-              <b>비유:</b> 병뚜껑·드릴 — 돌면서 들어간다. 우리 코드의 모든
-              관절은 스크류축 <Tex t='\mathcal{S}=(\omega,v)' /> 로 표현.
+              <b>비유:</b> 병뚜껑·드릴 — 돌면서 들어간다. <br /> 모든 관절은
+              스크류축 <Tex t='\mathcal{S}=(\omega,v)' /> 로 표현
             </Ex>
           </>
         }
-        r={<Fig svg={SCREW} cap='Screw = 회전 + 직진' />}
+        r={
+          <Fig
+            svg={`<img src="${screwImg}" alt="스크류(나사) 운동" style="max-height:40vh;border-radius:8px" />`}
+            cap='Screw = 회전 + 직진 (MR)'
+          />
+        }
       />
     ),
   },
@@ -380,9 +387,10 @@ const SLIDES: S[] = [
                   관절(모터) 수
                 </>,
                 <>
-                  공간 속 한 물체를 <A>완전히</A> 놓으려면 — 위치 3(
-                  <Tex t='x,y,z' />) + 자세 3(<A>roll·pitch·yaw</A>) ={' '}
-                  <b>6 자유도</b>
+                  공간 속 한 물체를 <A>완전히</A> 놓으려면 <br />
+                  위치 3(
+                  <Tex t='x,y,z' />) + 자세 3(
+                  <Tex t='\phi,\theta,\psi' />) = <b>6 자유도</b>
                 </>,
                 <>
                   그래서 “팔”형 로봇의 표준이 <A>6축</A> (어디든·어느 방향으로든
@@ -391,8 +399,8 @@ const SLIDES: S[] = [
               ]}
             />
             <Ex>
-              <b>여유(redundant):</b> 6보다 많으면(7축) 같은 손끝 자세를 여러
-              모양으로 — 장애물 회피.
+              <b>여유(redundant):</b> 6DOF 이상일 때 같은 End-effector 자세를
+              여러 모양으로 <br />— 장애물 회피
             </Ex>
           </>
         }
@@ -404,34 +412,82 @@ const SLIDES: S[] = [
     title: '여러 로봇의 자유도',
     body: (
       <>
-        <div className='flex items-end justify-center gap-8'>
+        <div className='flex items-end justify-center gap-6'>
           <RobotFigure
             robotId='ur5'
-            height={360}
-            capClassName='text-lg'
-            cap='UR5 · 6-DOF'
+            height={300}
+            capClassName='text-base'
+            cap='UR5 · 6-DOF · R×6'
           />
           <RobotFigure
             robotId='panda'
-            height={360}
-            capClassName='text-lg'
-            cap='Franka Panda · 7-DOF'
+            height={300}
+            capClassName='text-base'
+            cap='Franka Panda · 7-DOF · R×7'
           />
           <RobotFigure
             robotId='iiwa14'
-            height={360}
-            capClassName='text-lg'
-            cap='KUKA iiwa14 · 7-DOF'
+            height={300}
+            capClassName='text-base'
+            cap='KUKA iiwa14 · 7-DOF · R×7'
+          />
+          <RobotFigure
+            robotId='omx'
+            height={300}
+            dist={0.75}
+            target={0.15}
+            capClassName='text-base'
+            cap='OpenManipulator-X · 4-DOF · R×4'
           />
         </div>
         <div className='text-muted-foreground mt-4 text-center text-xl'>
-          셋 다 <b className='text-foreground'>회전관절(R)만</b> — UR5는 R×6,
-          Panda·iiwa14는 R×7(<b className='text-foreground'>여유자유도</b>). 그
-          외: 2축 <b className='text-foreground'>2</b> · 델타{' '}
-          <b className='text-foreground'>3</b> · SCARA{' '}
-          <b className='text-foreground'>4</b> · 산업용 표준{' '}
-          <b className='text-foreground'>6</b> — 자유도가 도달 범위와 IK
-          난이도를 결정
+          넷 다 <b className='text-foreground'>회전관절(R)만</b>인데 자유도는
+          4~7로 제각각 —{' '}
+          <b className='text-foreground'>
+            자유도가 도달 범위와 IK 난이도를 결정
+          </b>
+          합니다.
+          <br />
+          회전·직동을 섞거나 병렬로 만든 다른 형태(
+          <b className='text-foreground'>델타 · SCARA</b>)는 다음 장 →
+        </div>
+      </>
+    ),
+  },
+
+  {
+    title: '여러 로봇의 자유도',
+    body: (
+      <>
+        <div className='flex items-end justify-center gap-12'>
+          <div className='text-center'>
+            <img
+              src={deltaImg}
+              alt='델타(병렬) 로봇'
+              className='border-border mx-auto max-h-[42vh] rounded-xl border shadow-2xl'
+            />
+            <div className='text-muted-foreground mt-2 text-lg'>
+              델타 · 3-DOF · 병렬 R×3
+            </div>
+          </div>
+          <div className='text-center'>
+            <img
+              src={scaraImg}
+              alt='SCARA 로봇'
+              className='border-border mx-auto max-h-[42vh] rounded-xl border shadow-2xl'
+            />
+            <div className='text-muted-foreground mt-2 text-lg'>
+              SCARA · 4-DOF · R-R-P-R (직동관절 P)
+            </div>
+          </div>
+        </div>
+        <div className='text-muted-foreground mt-4 text-center text-xl'>
+          <b className='text-foreground'>델타</b>: 다리 셋을 병렬로 —
+          초고속·경량 (픽앤플레이스). · <b className='text-foreground'>SCARA</b>
+          : 수평 회전 + 수직 직동(P) — 평면 조립에 강함.
+        </div>
+        <div className='text-muted-foreground/60 mt-3 text-center text-xs'>
+          사진 출처 — 델타: evsint.com · SCARA: naurobot.com
         </div>
       </>
     ),
@@ -439,7 +495,7 @@ const SLIDES: S[] = [
 
   /* ───────── 3. 기구학 ───────── */
   {
-    title: '③ 기구학 — 왜 필요한가',
+    title: '③ 기구학 ',
     body: (
       <>
         <UL
@@ -579,7 +635,7 @@ const SLIDES: S[] = [
 
   /* ───────── 4. 동역학 ───────── */
   {
-    title: '④ 동역학 — 왜 필요한가',
+    title: '④ 동역학 ',
     body: (
       <>
         <UL
@@ -641,7 +697,7 @@ const SLIDES: S[] = [
 
   /* ───────── 5. 경로계획 ───────── */
   {
-    title: '⑤ 경로계획 — 왜 필요한가',
+    title: '⑤ 경로계획 ',
     body: (
       <>
         <UL
@@ -701,7 +757,7 @@ const SLIDES: S[] = [
 
   /* ───────── 6. 제어 ───────── */
   {
-    title: '⑥ 제어 — 왜 필요한가',
+    title: '⑥ 제어 ',
     body: (
       <>
         <UL
@@ -938,10 +994,6 @@ const SLIDES: S[] = [
                   <span className='text-emerald-600'>법선=힘 제어</span> ·{' '}
                   <A>접선=위치 제어</A> 동시 (칠판에 분필로 선 긋기)
                 </>,
-                <>
-                  곡면(평면/원기둥/구/메시) <b>컨투어 추종</b>까지 — 법선이 매
-                  순간 바뀌어도 동일 식
-                </>,
               ]}
             />
             <Num items={['힘오차 ≈ 0%', '접선오차 0.8mm']} />
@@ -1003,33 +1055,13 @@ const SLIDES: S[] = [
     ),
   },
   {
-    title: '라이브 데모 & 정리',
     body: (
       <div className='text-center'>
-        <Link to='/'>
-          <Button size='lg' className='my-3 text-lg'>
-            ▶ 시뮬레이터 열기
-          </Button>
-        </Link>
-        <div className='mt-2 flex flex-wrap justify-center gap-2 text-base'>
-          {[
-            '관절·자유도 → 몸',
-            'FK/IK → 어디로',
-            '동역학 → 어떤 힘으로',
-            '5차 경로 → 어떻게',
-            'PD·PID·CT·임피던스·힘 → 정확히',
-          ].map((t, i) => (
-            <span
-              key={i}
-              className='rounded-full border border-sky-500 bg-sky-500/15 px-3 py-1 text-sky-700'
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-        <div className='text-muted-foreground mt-4'>
-          감사합니다 🙇 — 수학적 배경은 부록에
-        </div>
+        <h1 className='my-8 text-8xl font-extrabold tracking-tight'>
+          Q &amp; A
+        </h1>
+        <div className='text-3xl font-semibold'>감사합니다 🙇</div>
+        <div className='text-muted-foreground mt-3 text-lg'></div>
       </div>
     ),
   },
@@ -1060,6 +1092,12 @@ const SLIDES: S[] = [
           ]}
         />
         <Eq t='[\omega]=R^\top\dot R=-[\omega]^\top\in so(3),\quad R=\exp([\omega]\theta)' />
+        <Eq t='\omega=(\omega_x,\omega_y,\omega_z)\ \Rightarrow\ [\omega]=\begin{bmatrix}0&-\omega_z&\omega_y\\\omega_z&0&-\omega_x\\-\omega_y&\omega_x&0\end{bmatrix}' />
+        <div className='text-muted-foreground text-base'>
+          반대칭(
+          <Tex t='[\omega]^\top=-[\omega]' />) — 대각은 0, 외적{' '}
+          <Tex t='[\omega]v=\omega\times v' /> 를 행렬로 쓴 것.
+        </div>
       </>
     ),
   },
@@ -1091,8 +1129,10 @@ const SLIDES: S[] = [
         title='Body Jacobian & Singularity'
         l={
           <>
-            <Eq t='\mathcal{V}_b=J_b(\theta)\dot\theta' />
-            <Eq t='w=\sqrt{\det(J_bJ_b^\top)},\ \dot\theta=J_b^\top(J_bJ_b^\top+\lambda^2 I)^{-1}\mathcal{V}_b' />
+            <div className='flex flex-col items-start'>
+              <Eq t='\mathcal{V}_b=J_b(\theta)\dot\theta' />
+              <Eq t='w=\sqrt{\det(J_bJ_b^\top)},\ \dot\theta=J_b^\top(J_bJ_b^\top+\lambda^2 I)^{-1}\mathcal{V}_b' />
+            </div>
             <UL
               items={[
                 <>
@@ -1227,11 +1267,14 @@ const SLIDES: S[] = [
 ];
 
 export default function Slides() {
-  const [cur, setCur] = useState(0);
+  // 현재 페이지를 store 에 둬 시뮬↔발표 전환·새로고침에도 같은 슬라이드 유지
+  const cur = useSim((s) => s.slide);
+  const setCur = useSim((s) => s.setSlide);
   const n = SLIDES.length;
+  const idx = Math.min(Math.max(cur, 0), n - 1); // 덱 길이가 바뀐 경우 안전 클램프
   const go = useCallback(
     (d: number) => setCur((c) => Math.max(0, Math.min(n - 1, c + d))),
-    [n],
+    [n, setCur],
   );
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1251,9 +1294,9 @@ export default function Slides() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go, n]);
+  }, [go, n, setCur]);
 
-  const s = SLIDES[cur];
+  const s = SLIDES[idx];
   return (
     <div className='bg-background text-foreground fixed inset-0 overflow-hidden'>
       {/* 공통 SVG 화살표 마커 */}
@@ -1294,11 +1337,11 @@ export default function Slides() {
 
       <div
         className='absolute top-0 left-0 z-10 h-1 bg-gradient-to-r from-blue-500 to-sky-400 transition-all'
-        style={{ width: `${((cur + 1) / n) * 100}%` }}
+        style={{ width: `${((idx + 1) / n) * 100}%` }}
       />
 
       <div
-        key={cur}
+        key={idx}
         className={`animate-in fade-in flex h-full flex-col justify-center px-[7vw] py-[6vh] duration-300 ${s.divider ? 'items-start bg-[radial-gradient(120%_80%_at_100%_0%,rgba(59,130,246,.18),transparent_60%)]' : ''}`}
       >
         {s.kicker && (
@@ -1327,7 +1370,7 @@ export default function Slides() {
             ◀
           </button>
           <span>
-            {cur + 1} / {n}
+            {idx + 1} / {n}
           </span>
           <button
             onClick={() => go(1)}

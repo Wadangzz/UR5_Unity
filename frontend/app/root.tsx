@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentRef,
+} from 'react';
 import { Link } from 'react-router-dom';
 import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import {
@@ -46,6 +52,7 @@ import {
   type RunRequest,
   type RunResponse,
 } from '@/api';
+import { useSim } from '@/store';
 
 type Wall = {
   shape: string;
@@ -207,32 +214,41 @@ function DrawnPath({ points }: { points: number[][] }) {
 export default function App() {
   // 멀티로봇: 목록 + 선택. robotId 가 바뀌면 RobotView 를 key 로 remount → 재로드.
   const [robots, setRobots] = useState<RobotSummary[]>([]);
-  const [robotId, setRobotId] = useState('ur5');
   const [meta, setMeta] = useState<JointMeta[]>([]);
-  const [joints, setJoints] = useState<number[]>([]);
   const [ready, setReady] = useState<number[]>([]); // 비특이 운용 출발 자세
-  const controllers = CONTROLLERS;
-  const [controller, setController] = useState('computed_torque');
-  const [trajMode, setTrajMode] = useState('joint'); // joint | task(직교 직선)
-  const [gains, setGains] = useState<Record<string, number>>({});
-  const [autoTune, setAutoTune] = useState(false);
-  const [targetTs, setTargetTs] = useState(0.6); // 목표 정착시간(s)
-  const [payload, setPayload] = useState(0);
-  const [modelScale, setModelScale] = useState(1);
-  const [friction, setFriction] = useState(0); // 관절 쿨롱 마찰(N·m)
-  const [tauMax, setTauMax] = useState(0); // 토크 한계(N·m, 0=무제한)
-  const [controlRate, setControlRate] = useState(0); // 0=연속, >0=이산 ZOH(Hz)
-  const [noise, setNoise] = useState(0); // 센서 노이즈 std(rad)
   const [noiseSeed, setNoiseSeed] = useState(0); // 노이즈 realization seed
-  // 힘/하이브리드: 표면·목표 (fd 목표힘, gap 접근간격, move_len 접선이동, shape 표면, radius 곡면반경)
-  const [forceTask, setForceTask] = useState({
-    fd: 20,
-    gap: 0.05,
-    move_len: 0.1,
-    shape: 'plane', // plane | cylinder | sphere | mesh (컨투어)
-    radius: 0.08, // 곡면 반경(m)
-    mesh_scale: 1, // 업로드 메시 배치 스케일
-  });
+  const controllers = CONTROLLERS;
+
+  // 발표↔시뮬 라우트 전환(App 언마운트)·새로고침에도 유지 — zustand store (app/store.ts)
+  const robotId = useSim((s) => s.robotId);
+  const setRobotId = useSim((s) => s.setRobotId);
+  const joints = useSim((s) => s.joints);
+  const setJoints = useSim((s) => s.setJoints);
+  const controller = useSim((s) => s.controller);
+  const setController = useSim((s) => s.setController);
+  const trajMode = useSim((s) => s.trajMode); // joint | task(직교 직선)
+  const setTrajMode = useSim((s) => s.setTrajMode);
+  const gains = useSim((s) => s.gains);
+  const setGains = useSim((s) => s.setGains);
+  const autoTune = useSim((s) => s.autoTune);
+  const setAutoTune = useSim((s) => s.setAutoTune);
+  const targetTs = useSim((s) => s.targetTs); // 목표 정착시간(s)
+  const setTargetTs = useSim((s) => s.setTargetTs);
+  const payload = useSim((s) => s.payload);
+  const setPayload = useSim((s) => s.setPayload);
+  const modelScale = useSim((s) => s.modelScale);
+  const setModelScale = useSim((s) => s.setModelScale);
+  const friction = useSim((s) => s.friction); // 관절 쿨롱 마찰(N·m)
+  const setFriction = useSim((s) => s.setFriction);
+  const tauMax = useSim((s) => s.tauMax); // 토크 한계(N·m, 0=무제한)
+  const setTauMax = useSim((s) => s.setTauMax);
+  const controlRate = useSim((s) => s.controlRate); // 0=연속, >0=이산 ZOH(Hz)
+  const setControlRate = useSim((s) => s.setControlRate);
+  const noise = useSim((s) => s.noise); // 센서 노이즈 std(rad)
+  const setNoise = useSim((s) => s.setNoise);
+  // 힘/하이브리드 표면·목표 (fd 목표힘, gap 접근간격, shape 표면, radius 반경, mesh_scale)
+  const forceTask = useSim((s) => s.forceTask);
+  const setForceTask = useSim((s) => s.setForceTask);
   const setForceTaskField = (
     key: 'fd' | 'gap' | 'move_len' | 'radius' | 'shape' | 'mesh_scale',
     value: number | string,
@@ -272,9 +288,11 @@ export default function App() {
   };
   // 하이브리드 컨투어: 표면 미리보기(현재 자세 기준) + 표면에 그린 경로 점
   const [previewWall, setPreviewWall] = useState<Wall | null>(null);
-  const [drawnPath, setDrawnPath] = useState<number[][]>([]);
+  const drawnPath = useSim((s) => s.drawnPath);
+  const setDrawnPath = useSim((s) => s.setDrawnPath);
   const addDrawPoint = (p: number[]) => setDrawnPath((prev) => [...prev, p]);
-  const [push, setPush] = useState<number[]>([0, 0, 0]); // 외란 외력(N, base XYZ)
+  const push = useSim((s) => s.push); // 외란 외력(N, base XYZ)
+  const setPush = useSim((s) => s.setPush);
   const setPushAxis = (index: number, value: number) =>
     setPush((prev) => prev.map((p, i) => (i === index ? value : p)));
   const [running, setRunning] = useState(false);
@@ -285,10 +303,40 @@ export default function App() {
   );
   const rafRef = useRef<number | null>(null);
 
+  // 카메라(줌·회전·팬) 유지 — OrbitControls 상태를 store 에 저장/복원
+  const controlsRef = useRef<ComponentRef<typeof OrbitControls> | null>(null);
+  const camInit = useState(() => useSim.getState().camPos)[0];
+  const setCamPos = useSim((s) => s.setCamPos);
+  const setCamTarget = useSim((s) => s.setCamTarget);
+  // 콜백 ref: OrbitControls 가 실제 마운트되는 시점에 저장된 타깃(팬)을 복원(타이밍 보장)
+  const onControls = useCallback(
+    (c: ComponentRef<typeof OrbitControls> | null) => {
+      controlsRef.current = c;
+      if (!c) return;
+      const t = useSim.getState().camTarget;
+      c.target.set(t[0], t[1], t[2]);
+      c.update();
+    },
+    [],
+  );
+  const saveCam = () => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const p = c.object.position;
+    setCamPos([p.x, p.y, p.z]);
+    setCamTarget([c.target.x, c.target.y, c.target.z]);
+  };
+
   // 게인 결정: 자동(극배치)이면 목표 정착시간에서 계산, 수동이면 제어기 기본값.
   // 극배치(ζ=1 임계, 2% 정착 ts≈4/(ζ·ωn)): ωn=4/ts → Kp=ωn², Kd=2ωn.
   // Ki(있으면)는 안정한계 Ki<Kp·Kd 내 안전값(0.3·Kp·Kd).
+  const gainsInit = useRef(false);
   useEffect(() => {
+    // 와리가리/새로고침 복귀 시 저장된 수동 게인을 덮어쓰지 않도록 최초 1회는 건너뜀
+    if (!gainsInit.current) {
+      gainsInit.current = true;
+      if (Object.keys(useSim.getState().gains).length > 0) return;
+    }
     const spec = controllers.find((c) => c.name === controller);
     if (!spec) return;
     const g: Record<string, number> = {};
@@ -312,7 +360,7 @@ export default function App() {
       spec.params.forEach((p) => (g[p.key] = p.default));
     }
     setGains(g);
-  }, [controller, controllers, autoTune, targetTs]);
+  }, [controller, controllers, autoTune, targetTs, setGains]);
   const setGain = (key: string, value: number) =>
     setGains((prev) => ({ ...prev, [key]: value }));
   // 언마운트 시 재생 루프 정리
@@ -386,6 +434,7 @@ export default function App() {
   const onRobotChange = (id: string) => {
     if (id === robotId || running) return;
     setRobotId(id);
+    setJoints([]); // 새 로봇 → onLoaded 가 새 ready 로 채우도록 포즈 비움
     setResult(null);
     setLive(null);
   };
@@ -395,7 +444,9 @@ export default function App() {
   const handleLoaded = useCallback((m: JointMeta[], r: number[]) => {
     setMeta(m);
     setReady(r);
-    setJoints(r);
+    // 저장된 포즈가 있으면(와리가리 복귀) 유지, 없으면(최초/로봇전환) ready 로
+    const st = useSim.getState();
+    if (st.joints.length === 0) st.setJoints(r);
   }, []);
 
   const setJoint = (index: number, value: number) =>
@@ -635,7 +686,11 @@ export default function App() {
 
       <Canvas
         flat
-        camera={{ position: [1.3, -1.3, 0.9], up: [0, 0, 1], fov: 50 }}
+        camera={{
+          position: camInit as [number, number, number],
+          up: [0, 0, 1],
+          fov: 50,
+        }}
         shadows
       >
         {/* flat = 톤매핑 끔(어두운 재질이 검게 뭉개지는 것 방지).
@@ -704,7 +759,12 @@ export default function App() {
           />
         </GizmoHelper>
 
-        <OrbitControls target={[0, 0, 0.4]} enableDamping makeDefault />
+        <OrbitControls
+          ref={onControls}
+          enableDamping
+          makeDefault
+          onEnd={saveCam}
+        />
       </Canvas>
     </div>
   );

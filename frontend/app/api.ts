@@ -3,6 +3,35 @@ import axios from 'axios';
 
 const http = axios.create({ baseURL: '/api' });
 
+// 시뮬 인증 키(로그인 폼이 받음). sessionStorage 에 저장 → 새로고침은 유지하되
+// 탭/브라우저 닫으면 사라짐(다음에 다시 로그인). 모든 /api 요청에 헤더로 첨부.
+// 백엔드 SIM_KEY 미설정이면 인증 OFF(키 없이도 통과) — dev 는 로그인 화면 안 뜸.
+const SIM_KEY_STORAGE = 'sim_key';
+export const getSimKey = () => sessionStorage.getItem(SIM_KEY_STORAGE) ?? '';
+export const setSimKey = (k: string) =>
+  sessionStorage.setItem(SIM_KEY_STORAGE, k);
+http.interceptors.request.use((config) => {
+  const k = getSimKey();
+  if (k) config.headers['X-Sim-Key'] = k;
+  return config;
+});
+// 현재 저장된 키로 시뮬 권한이 있나(또는 인증 비활성). 200=ok → 시뮬, 401=로그인 필요.
+export const checkAuth = () =>
+  http
+    .get('/auth')
+    .then(() => true)
+    .catch(() => false);
+// 로그인 폼 제출: 키 검증 후 맞으면 저장. 반환 true=성공/false=틀림.
+export const login = async (key: string) => {
+  try {
+    await http.post('/login', { key });
+    setSimKey(key);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // 멀티로봇: 목록(로드 없이 메타) + 상세(렌더용 urdf_url·packages 포함)
 export interface RobotSummary {
   id: string;

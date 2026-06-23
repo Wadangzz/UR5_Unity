@@ -41,6 +41,10 @@ _SPECS = {
     "panda": ("Franka Panda", 7, _build_urdf(
         "Franka Panda", "panda_description", "panda_link8",
         [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785])),
+    # 저자유도 대비용 4축 교육용 팔(+그리퍼 2관절). 발표 '여러 로봇의 자유도' 슬라이드.
+    "omx": ("OpenManipulator-X", 4, _build_urdf(
+        "OpenManipulator-X", "open_manipulator_x_description", None,
+        [0.0, -0.6, 0.3, 0.8, 0.0, 0.0])),
 }
 
 

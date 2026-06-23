@@ -39,10 +39,22 @@ function loadMesh(path: string, manager: LoadingManager, done: MeshDone) {
       (e) => fail(done, e),
     );
   } else if (ext === 'stl') {
+    // STL 비주얼은 색 정보가 없어 단색을 입힌다. 등록 로봇 중 omx(OpenManipulator-X)만
+    // STL 비주얼을 쓰며 실제 색이 다크 차콜이라, 스틸블루 대신 깔끔한 다크그레이로.
     new STLLoader(manager).load(
       path,
       (geom) =>
-        done(new Mesh(geom, new MeshPhongMaterial({ color: 0x9aa6b2 }))),
+        done(
+          new Mesh(
+            geom,
+            // Panda 처럼 깨끗한 화이트 + 은은한 광택
+            new MeshPhongMaterial({
+              color: 0xf3f4f6,
+              specular: 0xffffff,
+              shininess: 60,
+            }),
+          ),
+        ),
       undefined,
       (e) => fail(done, e),
     );
@@ -121,6 +133,39 @@ export default function RobotView({ robotId, joints, onLoaded }: Props) {
       disposed = true;
     };
   }, [robotId]);
+
+  // omx(OpenManipulator-X)는 URDF 가 링크에 회색 재질을 박아둬 urdf-loader 가 색을
+  // 덮어쓴다 → 칙칙. robot 세팅 후(로드/HMR) 전체 메시를 Panda 풍 화이트로 강제 재색칠.
+  useEffect(() => {
+    if (!robot || robotId !== 'omx') return;
+    // 머리(link5)·그리퍼 = 검정, 나머지 링크 = 흰색. 살짝만 광택.
+    // (omx 는 링크 1개=STL 1개라 링크 단위로 색을 입힌다)
+    // 늦게 로드되는 STL 까지 잡도록 즉시 + 지연(300ms) 두 번 칠한다.
+    const BLACK = new Set(['link5', 'gripper_left_link', 'gripper_right_link']);
+    const linkNames = new Set(Object.keys(robot.links));
+    const paint = () =>
+      robot.traverse((o) => {
+        const m = o as Mesh;
+        if (!m.material) return;
+        let p: Object3D | null = o;
+        let link = '';
+        while (p) {
+          if (linkNames.has(p.name)) {
+            link = p.name;
+            break;
+          }
+          p = p.parent;
+        }
+        m.material = new MeshPhongMaterial({
+          color: BLACK.has(link) ? 0x1c1c1f : 0xf3f4f6,
+          specular: 0x33373d, // 살짝만 광택
+          shininess: 18,
+        });
+      });
+    paint();
+    const t = setTimeout(paint, 300);
+    return () => clearTimeout(t);
+  }, [robot, robotId]);
 
   // joints 변경 시 URDF 에 적용
   useEffect(() => {

@@ -428,7 +428,50 @@ zero(특이점) vs 운용 ready 자세(비특이) 구분.
 - **검증**: 회귀 plane/cyl/sphere 20N·발산없음, **mesh(구) 20.001N = 해석 sphere 일치**,
   off-center 박스 19.992N(중심오프셋 보정 정확), parity pytest 7, tsc/eslint/build clean,
   라이브 서버 업로드 200·wavy 6962면 OK.
-- 남은 것: STEP→메시 변환(CAD), 7-DOF 널공간.
+- 남은 것: STEP→메시 변환(CAD).
+
+### 🚀 발표/배포 — 단일포트 서빙 + 로그인 인증 (슬라이드 공개·시뮬 보호)
+
+회의실 노트북에서 웹으로 열 수 있게 배포 경로 + 접근제어. "슬라이드는 누구나, 시뮬은 나만".
+
+- **단일포트 서빙**: `app/main.py` 가 빌드된 `frontend/dist` 를 같은 출처로 SPA 서빙
+  (실파일이면 그 파일, 없으면 index.html 폴백). `/api`·`/meshes`·`/docs` 는 먼저 매칭.
+  → Vite 프록시 불필요, `uv run main.py` 하나로 프론트+API 전부. dist 없으면 JSON 루트(개발).
+- **LAN 바인딩**: `main.py` HOST/PORT 를 env 로(기본 `0.0.0.0`, 방화벽이 게이트). 노트북 접속.
+- **로그인 인증**: `SIM_KEY`(`.env`, `python-dotenv`) 설정 시 보호 활성, 빈 값이면 OFF(개발).
+  `APIKeyHeader`+`require_key` 의존성, `/api/login`·`/api/auth`. 프론트 `RequireSim` 가드가
+  `/`(시뮬)를 감싸 미인증이면 로그인 폼(슬라이드 링크 제공), `/slides` 는 항상 공개.
+  키는 **sessionStorage**(새로고침 유지·탭 닫으면 재로그인). 헤더 `X-Sim-Key` 자동 첨부.
+- **권한 분리(핵심)**: 슬라이드 3D 로봇이 `/api/robots/{id}` 를 쓰므로 **읽기/렌더는 공개**
+  (robot·robots·kinematics) / **쓰기·실행만 보호**(programs·simulate·mesh). → 공유 DB 안전 +
+  슬라이드 모델은 인증 없이 뜸. (전부 게이트했다가 슬라이드 모델 404 → 이 분리로 해결.)
+- 검증: dev(키 없음) /api/auth 200·바로 시뮬, 잠금 시 401→로그인폼, login 키 검증,
+  단일포트 `/`=빌드앱·`/slides` 폴백·LAN IP 200, /api/run 미인증 401.
+
+### 🤖 7-DOF 하이브리드 발산 수정 — 널공간 감쇠 (리던던시)
+
+panda/iiwa14 하이브리드가 깨지던 원인 = **task-space 제어(`τ=Jbᵀ·렌치`)가 7-DOF 여유
+1자유도(널공간)를 안 잡아** 내부 운동이 감쇠 없이 표류(중력·코리올리만 상쇄). 6-DOF 는
+Jacobian 정방이라 널공간 없음(멀쩡).
+
+- `_run_hybrid` 에 **동역학일관 널공간 감쇠**: `N = I − Jbᵀ(Λ Jb M⁻¹)`, `τ += N·(−KD_NULL·θ̇)`.
+  task 에 영향 0, 여유관절 속도만 감쇠. 6-DOF 는 `N≈0` → UR5 완전 불변.
+- 검증: iiwa14 구 컨투어 궤적요동 **10.3→4.1rad**(드리프트 3.14→1.07), ur5 1.92 그대로,
+  힘 20.00N 유지·발산 없음, parity pytest 7. 힘제어(force)는 접선운동 없어 무영향(미수정).
+
+### 💾 메시 업로드 디스크 영속 — reload/재시작 404 수정
+
+업로드 메시가 인메모리라 백엔드 reload(파일변경 감지) 때마다 사라져 "여러 번 RUN 하면 404".
+`mesh_store` 를 **메모리+디스크(임시폴더)** 로 — `get()` 이 메모리에 없으면 디스크에서 복구.
+id 카운터는 디스크 잔존 파일 다음부터(reload 후 충돌 방지). 검증: 메모리 강제로 비운 뒤
+get() 복구 OK, 없는 id 만 KeyError→404.
+
+### 🧩 전역상태(zustand) + 슬라이드 보강 + 리브랜드
+
+- **`store.ts`**(zustand+persist): 슬라이드↔시뮬 라우트 전환 시 App 언마운트로 날아가던
+  상태를 React 트리 밖+localStorage 에 보존. setter 시그니처를 useState 와 동일하게 둬
+  호출부 무수정(`root.tsx` 선언만 store 셀렉터로 교체).
+- 발표 슬라이드: 델타·SCARA 일러스트 등 보강. `UR5 → Robot Web Simulator` 리브랜드(멀티로봇).
 
 ---
 
