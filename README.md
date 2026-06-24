@@ -98,7 +98,7 @@ backend/
 │  ├─ sim.py       시뮬레이션 엔진(solve_ivp, 제어 루프) · dynamics_fast.py(numba RNE)
 │  ├─ realism.py   plant≠controller 모델 불확실성 · mesh_store.py(업로드 메시)
 │  └─ models.py · schemas.py · db.py · meshes_setup.py · main.py
-├─ demos/          standalone 제어·시각화 데모 (matplotlib)
+├─ tests/          RNE numpy↔numba parity (pytest)
 └─ pyproject.toml · uv.lock
 
 frontend/app/

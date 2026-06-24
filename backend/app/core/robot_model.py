@@ -10,10 +10,7 @@ ur5_model 의 하드코딩 함수(fk/jacobian_body/ik/manipulability/dls_inv)를
 """
 import numpy as np
 
-from app.core.robot_math import SE3
-
-_SING_EPS = 0.04      # σ_min < ε → 특이점 근접(감쇠 시작)
-_SING_LAM = 0.04      # damped least-squares 감쇠 상한
+from app.core.robot_math import SE3, Kinematics
 
 
 class RobotModel:
@@ -38,66 +35,25 @@ class RobotModel:
         """동역학 엔진 인자 (Mlist, Glist, Slist)."""
         return (self.Mlist, self.Glist, self.Slist)
 
-    # --- 기구학 (MR body frame, radian) ---
+    # --- 기구학: robot_math.Kinematics 에 위임 (RobotModel 은 데이터만 보유) ---
     def fk(self, theta):
-        """말단 변환행렬 T_sb (body form): M · ∏ exp([B_i]θ_i)."""
-        T = self.M_home.copy()
-        for i in range(self.n):
-            T = T @ SE3.exp6(self.Blist[:, i] * theta[i])
-        return T
+        return Kinematics.fk(self.M_home, self.Blist, theta)
 
     def jacobian_body(self, theta):
-        """Body Jacobian (6 × n)."""
-        Jb = np.zeros((6, self.n))
-        Jb[:, self.n - 1] = self.Blist[:, self.n - 1]
-        T = np.eye(4)
-        for i in range(self.n - 2, -1, -1):
-            T = T @ SE3.exp6(self.Blist[:, i + 1] * -theta[i + 1])
-            Jb[:, i] = SE3.Adjoint(T) @ self.Blist[:, i]
-        return Jb
+        return Kinematics.jacobian_body(self.Blist, theta)
 
     def dls_inv(self, Jb):
-        """damped least-squares 역 (특이점 근처 큰 점프 방지). task 차원 6."""
-        s_min = np.linalg.svd(Jb, compute_uv=False)[-1]
-        if s_min >= _SING_EPS:
-            return np.linalg.pinv(Jb)
-        lam2 = _SING_LAM ** 2 * (1.0 - (s_min / _SING_EPS) ** 2)
-        return Jb.T @ np.linalg.inv(Jb @ Jb.T + lam2 * np.eye(6))
+        return Kinematics.dls_inv(Jb)
 
     def manipulability(self, theta):
-        """Yoshikawa 조작성. w=√det(JJᵀ)=∏σ_i, sigma_min=min σ. →0 이면 특이점."""
-        sv = np.linalg.svd(self.jacobian_body(np.asarray(theta, float)),
-                           compute_uv=False)
-        return {"w": float(np.prod(sv)), "sigma_min": float(sv[-1])}
+        return Kinematics.manipulability(self.Blist, theta)
 
     def ik(self, T_target, theta0=None, eomg=1e-4, ev=1e-4, max_iter=100):
-        """수치 IK (Newton-Raphson, body twist 오차, DLS 감쇠). → (θ, 수렴여부)."""
-        def wrap(t):
-            return np.mod(t + np.pi, 2 * np.pi) - np.pi    # 회전관절 가정
-
-        theta = (np.zeros(self.n) if theta0 is None
-                 else np.array(theta0, dtype=float))
-        for _ in range(max_iter):
-            T_err = np.linalg.inv(self.fk(theta)) @ T_target
-            ang = np.arccos(np.clip((np.trace(T_err[:3, :3]) - 1) / 2, -1.0, 1.0))
-            pos = np.linalg.norm(T_err[:3, 3])
-            if ang < eomg and pos < ev:
-                return wrap(theta), True
-            Vb = SE3.log(T_err)[0]
-            theta = theta + self.dls_inv(self.jacobian_body(theta)) @ Vb
-        return wrap(theta), False
+        return Kinematics.ik(self.M_home, self.Blist, T_target,
+                             theta0, eomg, ev, max_iter)
 
     def fk_skeleton(self, theta):
-        """관절 screw 축점 기준 스켈레톤 (시각화용). (n+2, 3)."""
-        pts = [np.zeros(3)]
-        prod = np.eye(4)
-        for i in range(self.n):
-            w, v = self.Slist[:3, i], self.Slist[3:, i]
-            q = np.cross(w, v)
-            pts.append((prod @ np.append(q, 1.0))[:3])
-            prod = prod @ SE3.exp6(self.Slist[:, i] * theta[i])
-        pts.append((prod @ self.M_home)[:3, 3])
-        return np.array(pts)
+        return Kinematics.fk_skeleton(self.Slist, self.M_home, theta)
 
     @classmethod
     def from_urdf(cls, urdf_path, ee_link=None, **kw):

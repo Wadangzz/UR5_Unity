@@ -1,46 +1,49 @@
 """
 UR5 동역학 모델 데이터 (Modern Robotics 표준 파라미터).
 
-단위: 길이 m, 질량 kg, 시간 s (SI) → 토크는 N·m 로 나온다.
+단위: 길이 m, 질량 kg, 시간 s (SI) → 토크는 N·m.
 출처: Modern Robotics (Lynch & Park), UR5 예제.
-robot_math.Dynamics 와 동일한 MR 컨벤션이므로 그대로 사용 가능.
+robot_math.Dynamics / dynamics_fast 와 동일한 MR 컨벤션이라 그대로 인자로 들어간다.
 
-    Mlist : 링크 좌표계 home 상대변환 M_{i-1,i}  (n+1 = 7 개)
-    Glist : 링크별 공간관성 G_i = diag(Ixx, Iyy, Izz, m, m, m)  (n = 6 개)
-    Slist : space frame 기준 screw 축 (6 x 6)
+이 모듈은 **검증된 UR5 상수**만 담는다(FK/IK/Jacobian 등 메서드는 RobotModel 이 일반화
+구현). robot_registry._build_ur5 가 이 상수로 RobotModel 을 만들고, URDF 추출값과 1e-11
+일치가 검증돼 있어 회귀/parity 기준값 역할을 한다.
+
+    MLIST : 링크 좌표계 home 상대변환 M_{i-1,i}  (n+1 = 7 개)
+    GLIST : 링크별 공간관성 G_i = diag(Ixx, Iyy, Izz, m, m, m)  (n = 6 개)
+    SLIST : space frame 기준 screw 축 (6 x 6)
 """
 
 import numpy as np
-from app.core.robot_math import SE3
 
 # --- 링크 좌표계 home 상대변환 (M_{i-1,i}) ---
 M01 = np.array([[1, 0, 0, 0],
-                [0, 1, 0, 0],  
-                [0, 0, 1, 0.089159], 
+                [0, 1, 0, 0],
+                [0, 0, 1, 0.089159],
                 [0, 0, 0, 1]])
 M12 = np.array([[0, 0, 1, 0.28],
                 [0, 1, 0, 0.13585],
                 [-1, 0, 0, 0],
                 [0, 0, 0, 1]])
-M23 = np.array([[1, 0, 0, 0], 
+M23 = np.array([[1, 0, 0, 0],
                 [0, 1, 0, -0.1197],
-                [0, 0, 1, 0.395],   
+                [0, 0, 1, 0.395],
                 [0, 0, 0, 1]])
-M34 = np.array([[0, 0, 1, 0], 
+M34 = np.array([[0, 0, 1, 0],
                 [0, 1, 0, 0],
                 [-1, 0, 0, 0.14225],
                 [0, 0, 0, 1]])
 M45 = np.array([[1, 0, 0, 0],
                 [0, 1, 0, 0.093],
-                [0, 0, 1, 0],  
+                [0, 0, 1, 0],
                 [0, 0, 0, 1]])
-M56 = np.array([[1, 0, 0, 0],  
-                [0, 1, 0, 0],   
+M56 = np.array([[1, 0, 0, 0],
+                [0, 1, 0, 0],
                 [0, 0, 1, 0.09465],
                 [0, 0, 0, 1]])
-M67 = np.array([[1, 0, 0, 0],  
+M67 = np.array([[1, 0, 0, 0],
                 [0, 0, 1, 0.0823],
-                [0, -1, 0, 0],   
+                [0, -1, 0, 0],
                 [0, 0, 0, 1]])
 MLIST = [M01, M12, M23, M34, M45, M56, M67]
 
@@ -70,130 +73,18 @@ GRAVITY = np.array([0.0, 0.0, -9.81])
 # 관절 개수
 N = 6
 
-# 비특이 운용 ready 자세 (kinematic zero=전관절0 은 특이점이므로 데모 출발점용).
+# 비특이 운용 ready 자세 (kinematic zero=전관절0 은 특이점 → 운용 출발점은 ready).
 # [0, -90°, 90°, -90°, -90°, 0] = 팔꿈치 굽힌 표준 UR ready 포즈 (σ_min≈0.22).
 READY = np.array([0.0, -np.pi / 2, np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0])
 
 
 def home_config():
-    """모든 관절각=0 일 때 말단(end-effector) 변환행렬 M07 = ∏ Mlist."""
+    """모든 관절각=0 일 때 말단(end-effector) 변환행렬 M07 = ∏ MLIST."""
     M = np.eye(4)
     for Mi in MLIST:
         M = M @ Mi
     return M
 
 
-# ----------------------------------------------------------------------
-#  FK / IK (MR body frame, radian) — 동역학과 같은 컨벤션
-# ----------------------------------------------------------------------
-M_HOME = home_config()                                   # 말단 home 변환 (M_{0,7})
-BLIST = SE3.Adjoint(np.linalg.inv(M_HOME)) @ SLIST       # body screw 축 (6x6)
-
-
-def fk_skeleton(theta):
-    """
-    실제 관절축 위치 기준 스켈레톤 (시각화용).
-    각 관절 screw 축 위의 기준점(원점에서의 수선의 발 q = ω×v)을 앞선 관절들의
-    운동으로 변환해 잇는다 → fk_all_joints(MLIST 프레임 원점)보다 실제 UR5
-    링크 구조(어깨·팔꿈치·손목 오프셋)에 가깝다.
-    :param theta: 관절각 (rad, 6개)
-    :return: (8,3) — base, J1..J6 축점, TCP(말단)
-    """
-    pts = [np.zeros(3)]                         # base
-    prod = np.eye(4)                            # ∏_{j<i} exp([S_j]θ_j)
-    for i in range(N):
-        w, v = SLIST[:3, i], SLIST[3:, i]
-        q = np.cross(w, v)                      # 관절 i 축 위의 기준점 (home)
-        pts.append((prod @ np.append(q, 1.0))[:3])
-        prod = prod @ SE3.exp6(SLIST[:, i] * theta[i])
-    pts.append((prod @ M_HOME)[:3, 3])          # TCP
-    return np.array(pts)
-
-
-def fk(theta):
-    """말단 변환행렬 T_sb (body form): M · ∏ exp([B_i]θ_i)."""
-    T = M_HOME.copy()
-    for i in range(N):
-        T = T @ SE3.exp6(BLIST[:, i] * theta[i])
-    return T
-
-
-def jacobian_body(theta):
-    """Body Jacobian (6x6)."""
-    Jb = np.zeros((6, N))
-    Jb[:, N - 1] = BLIST[:, N - 1]
-    T = np.eye(4)
-    for i in range(N - 2, -1, -1):
-        T = T @ SE3.exp6(BLIST[:, i + 1] * -theta[i + 1])
-        Jb[:, i] = SE3.Adjoint(T) @ BLIST[:, i]
-    return Jb
-
-
-_SING_EPS = 0.04      # σ_min 이 이보다 작으면 특이점 근접 → 감쇠
-_SING_LAM = 0.04      # damped least-squares 감쇠 상한
-
-
-def _dls_inv(Jb):
-    """damped least-squares 역(특이점 근처서 큰 점프 방지).
-    σ_min ≥ ε 면 일반 pinv, 미만이면 감쇠 λ²(JJᵀ+λ²I)⁻¹."""
-    s_min = np.linalg.svd(Jb, compute_uv=False)[-1]
-    if s_min >= _SING_EPS:
-        return np.linalg.pinv(Jb)
-    lam2 = _SING_LAM ** 2 * (1.0 - (s_min / _SING_EPS) ** 2)
-    return Jb.T @ np.linalg.inv(Jb @ Jb.T + lam2 * np.eye(6))
-
-
-# 속도제어(resolved-rate)·어드미턴스 등에서 J† 가 필요해 공개 별칭 제공.
-dls_inv = _dls_inv
-
-
-def manipulability(theta):
-    """Yoshikawa 조작성. w=√det(JJᵀ)=∏σ_i, sigma_min=min 특이값.
-    w→0 / sigma_min→0 이면 특이점."""
-    Jb = jacobian_body(np.asarray(theta, dtype=float))
-    sv = np.linalg.svd(Jb, compute_uv=False)
-    return {"w": float(np.prod(sv)), "sigma_min": float(sv[-1])}
-
-
-def ik(T_target, theta0=None, eomg=1e-4, ev=1e-4, max_iter=100):
-    """
-    수치 역기구학 (Newton-Raphson, body frame, damped least-squares). 라디안.
-    특이점 근처에선 DLS 로 감쇠해 발산 없이 수렴.
-    :param T_target: 목표 말단 변환행렬 (4x4)
-    :param theta0  : 초기 추정 관절각 (rad)
-    :return: (해 관절각, 수렴여부)
-    """
-    def wrap(t):
-        # 각 관절을 [-π, π] 로 정규화 → 같은 말단 자세의 최소 회전 해
-        return np.mod(t + np.pi, 2 * np.pi) - np.pi
-
-    theta = np.zeros(N) if theta0 is None else np.array(theta0, dtype=float)
-    for _ in range(max_iter):
-        T_err = np.linalg.inv(fk(theta)) @ T_target
-        ang = np.arccos(np.clip((np.trace(T_err[:3, :3]) - 1) / 2, -1.0, 1.0))
-        pos = np.linalg.norm(T_err[:3, 3])
-        if ang < eomg and pos < ev:
-            return wrap(theta), True
-        Vb = SE3.log(T_err)[0]                            # body twist 오차
-        theta = theta + _dls_inv(jacobian_body(theta)) @ Vb
-    return wrap(theta), False
-
-
-# ----------------------------------------------------------------------
-#  Kinematics.IK (degree 기반, 원본) 호환 어댑터
-#    MR 모델을 robot 인터페이스(.zero/.B_tw/.S_tw/.joints)로 노출 →
-#    Kinematics.IK(ik_robot, init_deg, desired) 로 그대로 호출 가능.
-#    (주의: Kinematics.IK 는 degree 입출력 → 호출부에서 deg↔rad 변환 필요)
-# ----------------------------------------------------------------------
-class _RevoluteJoint:
-    type = 'R'
-
-
-class _IKAdapter:
-    zero = M_HOME
-    B_tw = BLIST.T.tolist()      # 행 = 관절별 body screw 6벡터
-    S_tw = SLIST.T.tolist()      # 행 = 관절별 space screw 6벡터
-    joints = [_RevoluteJoint() for _ in range(N)]
-
-
-ik_robot = _IKAdapter()
+# 말단 home 변환 (M_{0,7}) — 레지스트리/라우터가 RobotModel 빌드·home_tcp 에 사용.
+M_HOME = home_config()

@@ -17,7 +17,7 @@
 """
 
 import numpy as np
-from scipy.spatial.transform import Rotation as R, Slerp
+from scipy.spatial.transform import Rotation as R
 
 
 # ======================================================================
@@ -275,136 +275,88 @@ class SE3:
 #  Kinematics — SO3/SE3 연산을 조합한 알고리즘 계층 (Jacobian, IK)
 # ======================================================================
 class Kinematics:
-    """Jacobian, 역기구학 등 Lie Group/Algebra primitive 를 조합한 기구학 알고리즘."""
+    """body-frame 기구학 알고리즘 (FK·Jacobian·DLS·IK·조작성).
+
+    모델 데이터(M_home, Blist[, Slist])를 인자로 받아 로봇 무관·radian 으로 동작한다.
+    `RobotModel` 이 자신의 데이터를 넘겨 이 메서드들을 호출한다(단일 구현).
+    """
+
+    SING_EPS = 0.04      # σ_min < ε → 특이점 근접(감쇠 시작)
+    SING_LAM = 0.04      # damped least-squares 감쇠 상한
 
     @staticmethod
-    def space_jacobian(matexps, screws):
-        """
-        Space Jacobian (6xN). 각 열은 space twist(se(3)).
-        :param matexps: 관절별 space 변환행렬 리스트
-        :param screws : space twist(6D) 리스트
-        """
-        n = len(matexps)
-        j_s = np.zeros((6, n))
-        j_s[:, 0] = np.array(screws[0]).reshape(6,)
-        mul = np.eye(4)
-        for i in range(1, n):
-            mul = mul @ matexps[i - 1]
-            j_s[:, i] = SE3.Adjoint(mul) @ np.array(screws[i]).reshape(6,)
-        return j_s
+    def fk(M_home, Blist, theta):
+        """말단 변환 T_sb (body form): M · ∏ exp([B_i]θ_i)."""
+        T = np.array(M_home, dtype=float)
+        for i in range(Blist.shape[1]):
+            T = T @ SE3.exp6(Blist[:, i] * theta[i])
+        return T
 
     @staticmethod
-    def body_jacobian(m, matexps_b, matexps_s, screws):
-        """
-        Body Jacobian (6xN). 각 열은 body twist(se(3)).
-        :param m: 초기 변환행렬
-        :param matexps_b: body 변환행렬 리스트
-        :param matexps_s: space 변환행렬 리스트
-        :param screws   : space twist(6D) 리스트
-        """
-        T_sb = SE3.compose(m, matexps_b)
-        T_bs = np.linalg.inv(T_sb)
-        return SE3.Adjoint(T_bs) @ Kinematics.space_jacobian(matexps_s, screws)
+    def jacobian_body(Blist, theta):
+        """Body Jacobian (6 × n)."""
+        n = Blist.shape[1]
+        Jb = np.zeros((6, n))
+        Jb[:, n - 1] = Blist[:, n - 1]
+        T = np.eye(4)
+        for i in range(n - 2, -1, -1):
+            T = T @ SE3.exp6(Blist[:, i + 1] * -theta[i + 1])
+            Jb[:, i] = SE3.Adjoint(T) @ Blist[:, i]
+        return Jb
 
     @staticmethod
-    def damped_pinv(J, damping=0.005):
-        """
-        SVD 기반 damped pseudoinverse. 특이점 근처 발산 억제 (λ = damping).
-        :param J: Jacobian 행렬
-        """
-        U, S, Vt = np.linalg.svd(J)
-        S_damped = np.diag([s / (s ** 2 + damping ** 2) for s in S])
-        return Vt.T @ S_damped @ U.T
+    def dls_inv(Jb):
+        """damped least-squares 역 (특이점 근처 큰 점프 방지). task 차원 6."""
+        eps, lam = Kinematics.SING_EPS, Kinematics.SING_LAM
+        s_min = np.linalg.svd(Jb, compute_uv=False)[-1]
+        if s_min >= eps:
+            return np.linalg.pinv(Jb)
+        lam2 = lam ** 2 * (1.0 - (s_min / eps) ** 2)
+        return Jb.T @ np.linalg.inv(Jb @ Jb.T + lam2 * np.eye(6))
 
     @staticmethod
-    def IK(robot, init, desired):
-        """
-        Numerical IK (Newton-Raphson, body frame). Gimbal lock 회피를 위해
-        전체 SE(3) 행렬로 오차를 비교한다.
-        :param robot: 로봇 클래스 (joints, B_tw, S_tw, zero)
-        :param init: 초기 관절각 (degree)
-        :param desired: 목표 pose [x, y, z, quaternion] (size 7)
-        :return: (해 관절각(degree), 반복 횟수)
-        """
-        M = robot.zero
-        B = robot.B_tw
-        S = robot.S_tw
-        L = len(robot.joints)
-
-        T_d = SE3.from_pose(desired)
-        threshold = 1e-4
-        count = 0
-
-        while True:
-            count += 1
-
-            # Forward Kinematics
-            matexps_b = [SE3.exp(init[i], B[i], joint=robot.joints[i].type) for i in range(L)]
-            matexps_s = [SE3.exp(init[i], S[i], joint=robot.joints[i].type) for i in range(L)]
-            T_sb = SE3.compose(M, matexps_b)
-
-            # Error Transformation
-            T_bd = np.linalg.inv(T_sb) @ T_d
-            V_bd, _, _ = SE3.log(T_bd)
-
-            # Jacobian
-            J_b = Kinematics.body_jacobian(M, matexps_b, matexps_s, S)
-
-            # 특이점 감지 및 감쇠 적용
-            sigma_min = np.min(np.linalg.svd(J_b, compute_uv=False))
-            if sigma_min < 1e-3:
-                J_pseudo = Kinematics.damped_pinv(J_b, damping=0.05)
-            else:
-                J_pseudo = Kinematics.damped_pinv(J_b)
-
-            # Update joint angle (in rad)
-            theta = deg2rad(init, robot.joints)
-            thetak = theta.reshape(L, 1) + J_pseudo @ V_bd.reshape(L, 1)
-            thetak = rad2deg(thetak, robot.joints)
-            init = theta_normalize(thetak, robot.joints)
-
-            # Check error norm (position and rotation)
-            pos_err = np.linalg.norm(T_bd[:3, 3])
-            rot_err = np.linalg.norm(V_bd)
-
-            if pos_err < threshold and rot_err < np.deg2rad(0.1):
-                break
-            if count >= 50:
-                break
-
-        return init, count
+    def manipulability(Blist, theta):
+        """Yoshikawa 조작성. w=√det(JJᵀ)=∏σ, sigma_min=min σ. →0 이면 특이점."""
+        Jb = Kinematics.jacobian_body(Blist, np.asarray(theta, float))
+        sv = np.linalg.svd(Jb, compute_uv=False)
+        return {"w": float(np.prod(sv)), "sigma_min": float(sv[-1])}
 
     @staticmethod
-    def IK_solutions(robot, desired, seeds=None, atol_deg=1.0):
-        """
-        여러 초기값(seed)에서 NR IK 를 돌려 서로 다른 해를 수집한다.
-        6R 로봇은 한 말단 자세에 대해 IK 해가 여러 개(UR5 최대 8개) 존재 →
-        seed 를 바꿔 다른 가지(elbow up/down, wrist flip 등)를 찾는다.
-        :param robot: 로봇 클래스
-        :param desired: 목표 pose [x, y, z, quaternion]
-        :param seeds: 초기각(degree) 후보 리스트. None 이면 구조적 기본 seed.
-        :param atol_deg: 같은 해로 간주할 각도 허용오차(중복 제거용)
-        :return: 서로 다른 해(degree, np.array)들의 리스트
-        """
-        L = len(robot.joints)
-        if seeds is None:
-            seeds = [[0] * L]
-            for s2 in (-60, 60):              # 어깨
-                for s3 in (-90, 90):          # 팔꿈치 (elbow up/down)
-                    for s5 in (-90, 90):      # 손목 (wrist flip)
-                        seed = [0] * L
-                        seed[1], seed[2], seed[4] = s2, s3, s5
-                        seeds.append(seed)
+    def ik(M_home, Blist, T_target, theta0=None,
+           eomg=1e-4, ev=1e-4, max_iter=100):
+        """수치 IK (Newton-Raphson, body twist 오차, DLS 감쇠). → (θ, 수렴여부)."""
+        n = Blist.shape[1]
 
-        sols = []
-        for seed in seeds:
-            sol, count = Kinematics.IK(robot, list(seed), desired)
-            if count >= 50:                   # 미수렴 폐기
-                continue
-            sol = np.asarray(sol, dtype=float)
-            if not any(np.allclose(sol, s, atol=atol_deg) for s in sols):
-                sols.append(sol)
-        return sols
+        def wrap(t):
+            return np.mod(t + np.pi, 2 * np.pi) - np.pi    # 회전관절 가정
+
+        theta = (np.zeros(n) if theta0 is None
+                 else np.array(theta0, dtype=float))
+        for _ in range(max_iter):
+            Tcur = Kinematics.fk(M_home, Blist, theta)
+            T_err = np.linalg.inv(Tcur) @ T_target
+            ang = np.arccos(np.clip((np.trace(T_err[:3, :3]) - 1) / 2, -1.0, 1.0))
+            pos = np.linalg.norm(T_err[:3, 3])
+            if ang < eomg and pos < ev:
+                return wrap(theta), True
+            Vb = SE3.log(T_err)[0]
+            theta = theta + Kinematics.dls_inv(
+                Kinematics.jacobian_body(Blist, theta)) @ Vb
+        return wrap(theta), False
+
+    @staticmethod
+    def fk_skeleton(Slist, M_home, theta):
+        """관절 screw 축점 기준 스켈레톤 (시각화용). (n+2, 3)."""
+        n = Slist.shape[1]
+        pts = [np.zeros(3)]
+        prod = np.eye(4)
+        for i in range(n):
+            w, v = Slist[:3, i], Slist[3:, i]
+            q = np.cross(w, v)
+            pts.append((prod @ np.append(q, 1.0))[:3])
+            prod = prod @ SE3.exp6(Slist[:, i] * theta[i])
+        pts.append((prod @ M_home)[:3, 3])
+        return np.array(pts)
 
 
 # ======================================================================
@@ -412,7 +364,7 @@ class Kinematics:
 # ======================================================================
 class Dynamics:
     """
-    Recursive Newton-Euler 기반 동역학. Modern Robotics 8장 컨벤션.
+    Recursive Newton-Euler 기반 동역학. Modern Robotics 8장 컨벤션
 
     모델 데이터(로봇마다 필요):
         Mlist : 링크 좌표계 home 상대변환 [M_{0,1}, M_{1,2}, ..., M_{n,ee}] (n+1 개)
@@ -518,38 +470,8 @@ class Dynamics:
 
 
 # ----------------------------------------------------------------------
-#  유틸리티 (관절각 단위 변환 / 정규화 / 시간 스케일링)
+#  유틸리티 (시간 스케일링)
 # ----------------------------------------------------------------------
-def deg2rad(value, joint):
-    """회전 관절(R)만 degree → radian 으로 변환."""
-    theta = np.array(value)
-    for i in range(len(joint)):
-        if joint[i].type == 'R':
-            theta[i] = np.deg2rad(theta[i])
-    return theta
-
-
-def rad2deg(value, joint):
-    """회전 관절(R)만 radian → degree 로 변환."""
-    theta = np.array(value)
-    for i in range(len(joint)):
-        if joint[i].type == 'R':
-            theta[i] = np.rad2deg(value[i])
-    return theta
-
-
-def theta_normalize(value, joint):
-    """회전 관절(R) 각을 -180 ~ 180 범위로 정규화."""
-    theta = value.flatten().tolist()
-    for i in range(len(value)):
-        if joint[i].type == 'R':
-            if value[i] % 360 > 180:
-                theta[i] = theta[i] % 360 - 360
-            else:
-                theta[i] = theta[i] % 360
-    return theta
-
-
 def quintic_time_scaling(t, T):
     """
     5차 다항식 기반 시간 스케일링 s(t). (t=0, t=T 에서 속도·가속도 0)
@@ -566,92 +488,4 @@ def quintic_time_scaling(t, T):
     s_dot = 3 * a3 * t ** 2 + 4 * a4 * t ** 3 + 5 * a5 * t ** 4
     s_ddot = 6 * a3 * t + 12 * a4 * t ** 2 + 20 * a5 * t ** 3
     return s, s_dot, s_ddot
-
-
-# ----------------------------------------------------------------------
-#  궤적 생성 (task space / joint space)
-# ----------------------------------------------------------------------
-def interpolate_SE3_quat(T0, Td, T, N):
-    """
-    두 SE(3) 자세 사이를 SLERP(회전) + quintic(위치)으로 보간.
-    :param T0, Td: 시작/끝 변환행렬
-    :param T: 총 운동 시간
-    :param N: 보간 점 개수
-    :return: 4x4 변환행렬 리스트
-    """
-    pos0 = T0[:3, 3]
-    posd = Td[:3, 3]
-
-    key_times = [0, 1]
-    key_rots = R.from_matrix([T0[:3, :3], Td[:3, :3]])
-    slerp = Slerp(key_times, key_rots)
-
-    trajectory = []
-    for i in range(N):
-        t = i / (N - 1) * T
-        s, _, _ = quintic_time_scaling(t, T)
-        interp_rot = slerp([s])[0]
-        interp_pos = (1 - s) * pos0 + s * posd
-
-        T_interp = np.eye(4)
-        T_interp[:3, :3] = interp_rot.as_matrix()
-        T_interp[:3, 3] = interp_pos
-        trajectory.append(T_interp)
-
-    return trajectory
-
-
-def task_trajectory(robot, start, end, times=1.0, samples=100):
-    """
-    Task space(SE(3)) 에서 두 pose 사이의 매끄러운 궤적 생성.
-    :param start, end: pose [x, y, z, quaternion]
-    :return: 4x4 변환행렬 리스트
-    """
-    theta_start = np.array(start)
-    theta_end = np.array(end)
-
-    Td = SE3.from_pose(theta_end)
-    T0 = SE3.from_pose(theta_start)
-
-    return interpolate_SE3_quat(T0, Td, times, samples)
-
-
-def joint_trajectory(start, end, times=1.0, samples=100):
-    """
-    Joint space 에서 두 관절 구성 사이의 매끄러운 궤적 생성 (quintic).
-    :param start, end: 관절각 (degree)
-    :return: (d_theta, trajectory)
-    """
-    theta_start = np.array(start)
-    theta_end = np.array(end)
-
-    d_theta = theta_end - theta_start
-    for i in range(len(d_theta)):
-        if d_theta[i] > 180:
-            d_theta[i] -= 360
-        elif d_theta[i] < -180:
-            d_theta[i] += 360
-
-    T = times
-    N = samples
-
-    trajectory = []
-    velocity = []
-    acceleration = []
-
-    for i in range(N):
-        t = i / N * T
-        s, s_dot, s_ddot = quintic_time_scaling(t, T)
-        trajectory.append((theta_start + s * d_theta).tolist())
-        velocity.append((s_dot * d_theta).tolist())
-        acceleration.append((s_ddot * d_theta).tolist())
-
-    return d_theta, trajectory
-
-
-# ----------------------------------------------------------------------
-#  하위 호환: 기존 모듈 레벨 IK(...) 호출 유지 → Kinematics.IK 로 위임
-# ----------------------------------------------------------------------
-def IK(robot, init, desired):
-    return Kinematics.IK(robot, init, desired)
 
