@@ -26,8 +26,6 @@ sample_meshes/
 *.xlsx
 image.png
 
-# 환경변수(시크릿) — SIM_KEY 등
-.env
 
-# Claude Code 로컬 지침 (로컬 보관, 추적 안 함)
+.env
 CLAUDE.md
