@@ -1,7 +1,7 @@
 """Robot Web Simulator — FastAPI 앱.
 
-실행:  cd backend && uv run uvicorn app.main:app --reload
-문서:  http://localhost:8000/docs
+실행:  cd backend && uv run main.py
+문서:  http://localhost:8500/docs
 """
 import os
 from pathlib import Path

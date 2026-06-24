@@ -53,7 +53,6 @@ export default function RequireSim({
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
                 autoFocus
-                placeholder='발표자에게 받은 키'
               />
             </div>
             {error && <p className='text-xs text-red-600'>키가 틀렸습니다.</p>}

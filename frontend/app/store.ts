@@ -1,7 +1,7 @@
 /**
  * 시뮬레이터 전역 상태 (zustand + persist).
  *
- * 발표(/slides) ↔ 시뮬레이터(/) 라우트를 오가면 App 이 언마운트돼 useState 가
+ * 발표(/slides) ↔ 시뮬레이터(/simulation) 라우트를 오가면 App 이 언마운트돼 useState 가
  * 날아간다. 여기 둔 상태는 React 트리 밖에 살아 라우트 전환에도 유지되고,
  * persist(localStorage) 로 새로고침에도 보존된다.
  *

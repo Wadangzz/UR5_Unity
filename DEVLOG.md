@@ -466,12 +466,39 @@ Jacobian 정방이라 널공간 없음(멀쩡).
 id 카운터는 디스크 잔존 파일 다음부터(reload 후 충돌 방지). 검증: 메모리 강제로 비운 뒤
 get() 복구 OK, 없는 id 만 KeyError→404.
 
-### 🧩 전역상태(zustand) + 슬라이드 보강 + 리브랜드
+### 🎤 발표 자료 전면 보강 + 전역상태(zustand) + OpenManipulator-X
 
-- **`store.ts`**(zustand+persist): 슬라이드↔시뮬 라우트 전환 시 App 언마운트로 날아가던
-  상태를 React 트리 밖+localStorage 에 보존. setter 시그니처를 useState 와 동일하게 둬
-  호출부 무수정(`root.tsx` 선언만 store 셀렉터로 교체).
-- 발표 슬라이드: 델타·SCARA 일러스트 등 보강. `UR5 → Robot Web Simulator` 리브랜드(멀티로봇).
+내일 발표 대비 — 슬라이드 덱(`Slides.tsx`)을 **입문자 흐름**으로 재구성하고, 실제 로봇 3D·
+이미지·알고리즘 부록을 채우고, 발표↔시뮬 와리가리에도 상태가 유지되게 zustand 를 깔았다.
+
+**발표 덱 (`Slides.tsx`)**
+- 흐름: 관절→자유도→기구학→동역학→경로계획→제어→Q&A. 각 개념 "왜 필요→직관/비유→우리 적용".
+- **실제 로봇 3D 라이브 렌더** `RobotFigure`(urdf-loader 재사용, 카드형·자동회전): ur5·panda·
+  iiwa14 + **omx(4-DOF)**. 자유도 비교(4~7) 슬라이드.
+- 이미지: Modern Robotics 표지(타이틀 우측)·FK PoE 다이어그램·**델타/SCARA 제품사진(출처표기)**·
+  스크류(책 캡처). 도식: IK 2해(링크길이 동일하게 기하 재계산)·5차 다항식 곡선·관절 R/P·조작성 타원.
+- 부록(질문 대응): 수치 IK Newton-Raphson 의사코드+DLS·RNE 2-pass·라그랑지안·M·c·g 추출·
+  SO(3) 각속도 반대칭행렬. 수식 세로 배치 정리.
+- `Cols` 에 `title` 프롭 추가 → **타이틀을 좌측 컬럼 안에** 둬 r(이미지·3D)이 커도 제목·내용이
+  같이 정렬(레이아웃 균형). 13개 Cols 슬라이드 전환. 마무리는 큰 **Q & A**(시뮬 버튼 제거).
+
+**OpenManipulator-X (omx, 4-DOF) 추가** — robot_descriptions 기반
+- `robot_registry._SPECS` + `meshes_setup._ROBOT_DESC` 에 omx. `meshes_setup._prepare` 를
+  **중첩 패키지 레이아웃**(`open_manipulator/open_manipulator_description/`) 대응: 메시 src 부모
+  후보 2개(`dirname(REPO)`, `REPO`)를 순서대로 시도 → panda/iiwa14 무영향, omx STL 7개 복사 OK.
+- `RobotView`: omx 는 URDF 가 링크에 회색 재질을 박아둬 urdf-loader 가 STL 색을 덮어씀 → 로드 후
+  **메시 재질 재색칠**(머리 link5+그리퍼 검정, 나머지 흰색, 살짝 광택). 비동기 STL 대비 즉시+300ms 2회.
+
+**전역상태 (`store.ts`, zustand+persist)**
+- 슬라이드↔시뮬 라우트 전환 시 App 언마운트로 날아가던 상태를 React 트리 밖+localStorage 에 보존.
+  보존 대상: 시뮬 설정(controller/gains/sliders)·**현재 포즈**·**카메라**(OrbitControls pos/target)·
+  **슬라이드 페이지**(slide). setter 시그니처를 useState 와 동일하게 둬 호출부 무수정(선언만 셀렉터 교체).
+- 게인 effect 가드(복귀 시 수동게인 미덮어쓰기), `handleLoaded` 포즈 복원, `onRobotChange` 는 비움.
+
+**기타**
+- 발표 대본 `docs/PRESENTATION_SCRIPT.md`(gitignore) — 슬라이드 1:1 스피커노트 + MR 심화 멘트로 ~20분 보강.
+- 리브랜드 `UR5 → Robot Web Simulator`(멀티로봇). 발표자료 링크 우하단 이동.
+- 검증: tsc/eslint/prettier clean. (omx 첫 렌더는 메시 복사로 느림 → 발표 전 워밍업.)
 
 ---
 

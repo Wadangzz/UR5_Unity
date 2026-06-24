@@ -17,6 +17,7 @@ _DIR = Path(tempfile.gettempdir()) / "robotsim_mesh_uploads"
 _DIR.mkdir(exist_ok=True)
 _MESHES: dict[str, trimesh.Trimesh] = {}
 _MAX_FACES = 5000                                # 상한(초과 시 단순화)
+_MAX_FILES = 30                                  # 보관 상한(초과분 삭제)
 # id 카운터를 디스크 잔존 파일 다음부터 → reload 후 새 업로드 id 충돌 방지.
 _seen = [int(p.stem[1:]) for p in _DIR.glob("m*.stl") if p.stem[1:].isdigit()]
 _ids = count(max(_seen, default=0) + 1)
@@ -39,8 +40,17 @@ def store(data: bytes, filename: str) -> dict:
     mesh_id = f"m{next(_ids)}"
     mesh.export(_DIR / f"{mesh_id}.stl")         # 디스크 영속
     _MESHES[mesh_id] = mesh
+    _prune()                                     # 오래된 업로드 정리
     return {"mesh_id": mesh_id, "n_faces": int(len(mesh.faces)),
             "extents": mesh.extents.tolist()}
+
+
+def _prune():
+    """디스크 누적 방지: 오래된 것부터 삭제, 최신 _MAX_FILES 개만 유지."""
+    files = sorted(_DIR.glob("m*.stl"), key=lambda p: p.stat().st_mtime)
+    for p in files[:-_MAX_FILES]:
+        p.unlink(missing_ok=True)
+        _MESHES.pop(p.stem, None)
 
 
 def get(mesh_id: str) -> trimesh.Trimesh:

@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './app.css';
 import 'katex/dist/katex.min.css';
 import App from '@/root';
@@ -11,8 +11,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
+        <Route path='/' element={<Navigate to='/slides' replace />} />
         <Route
-          path='/'
+          path='/simulation'
           element={
             <RequireSim>
               <App />

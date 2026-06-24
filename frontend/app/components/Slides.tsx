@@ -3,12 +3,14 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from 'react';
 import { Link } from 'react-router-dom';
+import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { Html, OrbitControls } from '@react-three/drei';
 import katex from 'katex';
 import { Card, CardContent } from '@/components/ui/card';
 import RobotView from '@/components/RobotView';
@@ -17,6 +19,7 @@ import fkImg from '@/assets/fk_image.png';
 import deltaImg from '@/assets/delta.png';
 import scaraImg from '@/assets/scara.png';
 import screwImg from '@/assets/screw.png';
+import jointsImg from '@/assets/joints.png';
 import { useSim } from '@/store';
 import type { JointMeta } from '@/api';
 
@@ -209,15 +212,132 @@ function RobotFigure({
   );
 }
 
+/* ── 6-DOF 라이브 3D (강체 = 이동3 + 회전3) ── */
+function DofArrow({
+  dir,
+  color,
+}: {
+  dir: [number, number, number];
+  color: number;
+}) {
+  const helper = useMemo(
+    () =>
+      new THREE.ArrowHelper(
+        new THREE.Vector3(...dir).normalize(),
+        new THREE.Vector3(0, 0, 0),
+        1.5,
+        color,
+        0.35,
+        0.2,
+      ),
+    [dir, color],
+  );
+  return <primitive object={helper} />;
+}
+
+function DofRing({
+  rotation,
+  color,
+}: {
+  rotation: [number, number, number];
+  color: string;
+}) {
+  return (
+    <mesh rotation={rotation}>
+      <torusGeometry args={[1.15, 0.025, 12, 64]} />
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+function DofLabel({
+  position,
+  color,
+  children,
+}: {
+  position: [number, number, number];
+  color: string;
+  children: ReactNode;
+}) {
+  return (
+    <Html position={position} center>
+      <span
+        className='font-semibold whitespace-nowrap'
+        style={{ color, fontSize: 13 }}
+      >
+        {children}
+      </span>
+    </Html>
+  );
+}
+
+const boxGeom = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+
+function DofBody({ height = 320 }: { height?: number }) {
+  return (
+    <div className='text-center'>
+      <div
+        className='border-border bg-muted/30 mx-auto block overflow-hidden rounded-xl border shadow-2xl'
+        style={{ width: Math.round(height * 1.05), height }}
+      >
+        <Canvas
+          flat
+          camera={{ position: [2.6, -2.8, 2.0], up: [0, 0, 1], fov: 42 }}
+        >
+          <ambientLight intensity={1.1} />
+          <directionalLight position={[4, -4, 8]} intensity={1.2} />
+          <directionalLight position={[-5, 4, 4]} intensity={0.6} />
+          {/* 강체 */}
+          <mesh>
+            <boxGeometry args={[0.8, 0.8, 0.8]} />
+            <meshStandardMaterial color='#94a3b8' transparent opacity={0.35} />
+          </mesh>
+          <lineSegments>
+            <edgesGeometry args={[boxGeom]} />
+            <lineBasicMaterial color='#475569' />
+          </lineSegments>
+          {/* 이동 3 (x·y·z) */}
+          <DofArrow dir={[1, 0, 0]} color={0xef4444} />
+          <DofArrow dir={[0, 1, 0]} color={0x22c55e} />
+          <DofArrow dir={[0, 0, 1]} color={0x3b82f6} />
+          {/* 회전 3 (각 축 둘레) */}
+          <DofRing rotation={[0, Math.PI / 2, 0]} color='#ef4444' />
+          <DofRing rotation={[Math.PI / 2, 0, 0]} color='#22c55e' />
+          <DofRing rotation={[0, 0, 0]} color='#3b82f6' />
+          {/* 라벨 */}
+          <DofLabel position={[1.75, 0, 0]} color='#ef4444'>
+            x · roll
+          </DofLabel>
+          <DofLabel position={[0, 1.75, 0]} color='#22c55e'>
+            y · pitch
+          </DofLabel>
+          <DofLabel position={[0, 0, 1.75]} color='#3b82f6'>
+            z · yaw
+          </DofLabel>
+          <OrbitControls
+            autoRotate
+            autoRotateSpeed={1.4}
+            enableDamping
+            enablePan={false}
+            enableZoom={false}
+          />
+        </Canvas>
+      </div>
+      <div className='text-muted-foreground mt-1 text-sm'>
+        구속 없는 강체 1개 = 6-DOF (이동 x·y·z + 회전 roll·pitch·yaw)
+      </div>
+    </div>
+  );
+}
+
 /* ── SVG 도식 (raw) ── */
 const MANIP = `<svg viewBox="0 0 340 180" width="330"><ellipse cx="138" cy="98" rx="28" ry="18" transform="rotate(20 138 98)" fill="rgba(52,211,153,.18)" stroke="#059669" stroke-width="2"/><line x1="35" y1="140" x2="78" y2="72" stroke="#64748b" stroke-width="6"/><line x1="78" y1="72" x2="138" y2="98" stroke="#64748b" stroke-width="6"/><rect x="29" y="137" width="12" height="8" fill="#27344d"/><circle cx="78" cy="72" r="4.5" fill="#3b82f6"/><circle cx="138" cy="98" r="4.5" fill="#d97706"/><text x="95" y="166" fill="#059669" font-size="12.5" text-anchor="middle">정상 — 둥근</text><ellipse cx="291" cy="28" rx="7" ry="25" transform="rotate(-53 291 28)" fill="rgba(251,191,36,.18)" stroke="#d97706" stroke-width="2"/><line x1="205" y1="140" x2="248" y2="84" stroke="#64748b" stroke-width="6"/><line x1="248" y1="84" x2="291" y2="28" stroke="#64748b" stroke-width="6"/><rect x="199" y="137" width="12" height="8" fill="#27344d"/><circle cx="248" cy="84" r="4.5" fill="#3b82f6"/><circle cx="291" cy="28" r="4.5" fill="#d97706"/><text x="252" y="166" fill="#d97706" font-size="12.5" text-anchor="middle">특이점 — 납작</text></svg>`;
 const DAMP = `<svg viewBox="0 0 240 150" width="290"><line x1="30" y1="115" x2="225" y2="115" stroke="#27344d"/><line x1="30" y1="25" x2="30" y2="115" stroke="#27344d"/><line x1="30" y1="52" x2="225" y2="52" stroke="#64748b" stroke-dasharray="4 4"/><text x="200" y="47" fill="#64748b" font-size="11">목표</text><path d="M30,115 C70,8 95,72 120,55 C140,45 170,53 225,52" fill="none" stroke="#d97706" stroke-width="2.5"/><path d="M30,115 C80,52 130,52 225,52" fill="none" stroke="#059669" stroke-width="2.5"/><path d="M30,115 C110,92 170,57 225,53" fill="none" stroke="#0284c7" stroke-width="2.5"/><text x="118" y="18" fill="#d97706" font-size="11">ζ&lt;1</text><text x="150" y="42" fill="#059669" font-size="11">ζ=1</text><text x="162" y="78" fill="#0284c7" font-size="11">ζ&gt;1</text></svg>`;
 const MSD = `<svg viewBox="0 0 200 165" width="210"><line x1="20" y1="28" x2="180" y2="28" stroke="#64748b" stroke-width="3"/><path d="M100,28 l-10,12 l20,12 l-20,12 l20,12 l-10,12" fill="none" stroke="#0284c7" stroke-width="2.5"/><line x1="130" y1="28" x2="130" y2="76" stroke="#059669" stroke-width="2.5"/><rect x="124" y="58" width="12" height="18" fill="none" stroke="#059669" stroke-width="2"/><rect x="78" y="92" width="48" height="32" rx="5" fill="rgba(59,130,246,.2)" stroke="#3b82f6" stroke-width="2"/><text x="102" y="113" fill="#0f172a" font-size="13" text-anchor="middle">m</text><text x="60" y="58" fill="#0284c7" font-size="13">K</text><text x="142" y="56" fill="#059669" font-size="13">B</text><line x1="102" y1="124" x2="102" y2="150" stroke="#d97706" stroke-width="2.5" marker-end="url(#aw)"/></svg>`;
 const CHALK = `<svg viewBox="0 0 220 175" width="240"><rect x="150" y="20" width="22" height="145" fill="rgba(56,189,248,.12)" stroke="#0284c7" stroke-width="2"/><text x="161" y="14" fill="#0284c7" font-size="12" text-anchor="middle">벽</text><line x1="60" y1="92" x2="148" y2="92" stroke="#64748b" stroke-width="6"/><circle cx="148" cy="92" r="6" fill="#d97706"/><line x1="120" y1="92" x2="148" y2="92" stroke="#059669" stroke-width="3" marker-end="url(#ag)"/><text x="116" y="83" fill="#059669" font-size="12">법선 힘</text><line x1="148" y1="118" x2="148" y2="52" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="5 4" marker-end="url(#a)"/><text x="153" y="138" fill="#3b82f6" font-size="12">접선 이동</text></svg>`;
 const GRAV = `<svg viewBox="0 0 190 150" width="210"><line x1="40" y1="50" x2="40" y2="140" stroke="#27344d" stroke-width="6"/><line x1="40" y1="50" x2="145" y2="50" stroke="#64748b" stroke-width="7"/><circle cx="40" cy="50" r="7" fill="#3b82f6"/><line x1="92" y1="58" x2="92" y2="100" stroke="#d97706" stroke-width="2.5" marker-end="url(#aw)"/><line x1="145" y1="58" x2="145" y2="100" stroke="#d97706" stroke-width="2.5" marker-end="url(#aw)"/><text x="112" y="118" fill="#d97706" font-size="12">중력</text><path d="M30,65 A18,18 0 0,1 28,42" fill="none" stroke="#059669" stroke-width="2" marker-end="url(#ag)"/><text x="6" y="48" fill="#059669" font-size="13">τ</text></svg>`;
-const JOINTS = `<svg viewBox="0 0 330 150" width="330"><line x1="40" y1="120" x2="40" y2="62" stroke="#64748b" stroke-width="7"/><line x1="40" y1="62" x2="108" y2="42" stroke="#64748b" stroke-width="7"/><circle cx="40" cy="62" r="7" fill="#0284c7"/><path d="M60,44 A24,24 0 0,1 66,72" fill="none" stroke="#d97706" stroke-width="2.5" marker-end="url(#aw)"/><text x="58" y="138" fill="#0284c7" font-size="13" text-anchor="middle">회전관절 (R)</text><rect x="205" y="50" width="74" height="22" rx="3" fill="none" stroke="#64748b" stroke-width="3"/><rect x="218" y="55" width="28" height="12" rx="2" fill="rgba(59,130,246,.28)" stroke="#3b82f6" stroke-width="2"/><line x1="250" y1="61" x2="292" y2="61" stroke="#059669" stroke-width="2.5" marker-end="url(#ag)"/><text x="245" y="138" fill="#059669" font-size="13" text-anchor="middle">직동관절 (P)</text></svg>`;
-const ARM6 = `<svg viewBox="0 0 200 178" width="195"><rect x="58" y="160" width="44" height="11" rx="2" fill="#27344d"/><line x1="80" y1="160" x2="80" y2="120" stroke="#64748b" stroke-width="9"/><line x1="80" y1="120" x2="132" y2="80" stroke="#64748b" stroke-width="8"/><line x1="132" y1="80" x2="120" y2="40" stroke="#64748b" stroke-width="7"/><line x1="120" y1="40" x2="152" y2="28" stroke="#64748b" stroke-width="6"/><circle cx="80" cy="120" r="6" fill="#0284c7"/><circle cx="132" cy="80" r="6" fill="#0284c7"/><circle cx="120" cy="40" r="5.5" fill="#0284c7"/><circle cx="152" cy="28" r="5" fill="#d97706"/><text x="160" y="24" fill="#d97706" font-size="11">손끝</text></svg>`;
 const IK2 = `<svg viewBox="0 0 240 180" width="245"><rect x="43" y="150" width="14" height="9" fill="#27344d"/><circle cx="175" cy="75" r="6" fill="#d97706"/><text x="183" y="71" fill="#d97706" font-size="12">목표</text><line x1="50" y1="150" x2="90" y2="75" stroke="#0284c7" stroke-width="5"/><line x1="90" y1="75" x2="175" y2="75" stroke="#0284c7" stroke-width="5"/><circle cx="90" cy="75" r="5" fill="#3b82f6"/><line x1="50" y1="150" x2="135" y2="150" stroke="#059669" stroke-width="4" stroke-dasharray="6 4"/><line x1="135" y1="150" x2="175" y2="75" stroke="#059669" stroke-width="4" stroke-dasharray="6 4"/><circle cx="135" cy="150" r="5" fill="#059669"/><text x="36" y="64" fill="#0284c7" font-size="12">해1 (팔꿈치 위)</text><text x="118" y="172" fill="#059669" font-size="12">해2 (팔꿈치 아래)</text></svg>`;
+
 const QUINTIC = `<svg viewBox="0 0 230 160" width="270"><line x1="28" y1="130" x2="214" y2="130" stroke="#27344d"/><line x1="28" y1="22" x2="28" y2="130" stroke="#27344d"/><path d="M28,128 C95,128 110,40 186,40 L210,40" fill="none" stroke="#0284c7" stroke-width="2.5"/><path d="M28,128 Q107,46 186,128" fill="none" stroke="#d97706" stroke-width="2.5"/><text x="138" y="36" fill="#0284c7" font-size="11">위치 s(t)</text><text x="86" y="70" fill="#d97706" font-size="11">속도 ṡ(t)</text><text x="14" y="22" fill="#64748b" font-size="11">1</text><text x="183" y="145" fill="#64748b" font-size="11">T</text><text x="24" y="145" fill="#64748b" font-size="11">0</text></svg>`;
 
 type S = {
@@ -232,12 +352,14 @@ const SLIDES: S[] = [
   {
     body: (
       <div className='text-center'>
-        <div className='text-muted-foreground text-2xl'>로봇 웹 시뮬레이터</div>
         <h1 className='my-3 text-5xl leading-tight font-extrabold'>
           로봇은 어떻게 움직이는가
         </h1>
-        <div className='text-muted-foreground text-xl'>
-          관절 · 자유도 · 기구학 · 동역학 · 경로계획 · 제어
+        <div className='text-muted-foreground text-2xl'>
+          관절 · 자유도 · 기구학 · 동역학 · 경로계획 · 제어 관점
+        </div>
+        <div className='text-muted-foreground mt-16 text-lg'>
+          PLC파트 김진열 선임연구원
         </div>
       </div>
     ),
@@ -318,17 +440,14 @@ const SLIDES: S[] = [
           </>
         }
         r={
-          <div className='flex items-end justify-center gap-4'>
-            <RobotFigure robotId='ur5' height={220} cap='UR5 · 회전관절 6개' />
-            <div className='text-center'>
-              <div
-                className='border-border bg-muted/30 flex items-center justify-center rounded-xl border p-2 shadow-2xl'
-                style={{ height: 220 }}
-                dangerouslySetInnerHTML={{ __html: JOINTS }}
-              />
-              <div className='text-muted-foreground mt-1 text-sm'>
-                기본 1자유도 관절 (R · P)
-              </div>
+          <div className='text-center'>
+            <img
+              src={jointsImg}
+              alt='Typical robot joints'
+              className='border-border bg-muted/30 mx-auto inline-block max-h-[360px] w-auto rounded-xl border p-2 shadow-2xl'
+            />
+            <div className='text-muted-foreground mt-1 text-sm'>
+              Typical robot joints (R · P · H · C · U · S)
             </div>
           </div>
         }
@@ -393,8 +512,8 @@ const SLIDES: S[] = [
                   <Tex t='\phi,\theta,\psi' />) = <b>6 자유도</b>
                 </>,
                 <>
-                  그래서 “팔”형 로봇의 표준이 <A>6축</A> (어디든·어느 방향으로든
-                  도달)
+                  그래서 일반적인 산업용 로봇의 표준이 <A>6축</A> (어디든·어느
+                  방향으로든 도달)
                 </>,
               ]}
             />
@@ -404,7 +523,7 @@ const SLIDES: S[] = [
             </Ex>
           </>
         }
-        r={<Fig svg={ARM6} cap='위치3 (x·y·z) + 자세3 (roll·pitch·yaw)' />}
+        r={<DofBody />}
       />
     ),
   },
@@ -593,8 +712,13 @@ const SLIDES: S[] = [
         />
         <Ex>
           <b>예외:</b> 손목 3축이 한 점에 교차(스피리컬) 또는 <A>축이 평행</A>
-          하면 닫힌해 존재. <b>UR은 관절 2·3·4가 평행</b>해 해석해가 있다 —
-          Hawkins(2013), 최대 8개 해.
+          하면 닫힌해 존재. <b>UR은 관절 2·3·4가 평행</b>해 해석해가 있다 <br />
+          — Hawkins,{' '}
+          <i>
+            “Analytic Inverse Kinematics for the Universal Robots UR-5/UR-10
+            Arms”
+          </i>{' '}
+          (Georgia Tech 기술보고서, 2013), 최대 8개 해
         </Ex>
       </>
     ),
@@ -697,64 +821,36 @@ const SLIDES: S[] = [
 
   /* ───────── 5. 경로계획 ───────── */
   {
-    title: '⑤ 경로계획 ',
-    body: (
-      <>
-        <UL
-          items={[
-            <>
-              A→B로 <A>갑자기</A> 점프하면? 무한 가속 → 무한 토크 → 충격·진동.
-            </>,
-            <>
-              관절이 <b>천천히 출발해 천천히 멈추는</b> 부드러운 시간함수가
-              필요.
-            </>,
-            <>
-              경로(어디를 지나갈지) + <A>타임스케일링</A>(언제 얼마나 빨리) 로
-              분리.
-            </>,
-          ]}
-        />
-        <Ex>
-          목표: 시작·끝에서 <b>속도 0, 가속도 0</b> — 덜컹임 없이 출발/정지.
-        </Ex>
-      </>
-    ),
-  },
-  {
     body: (
       <Cols
-        title='5차 다항식 타임스케일링'
+        title='⑤ 경로계획'
         l={
           <>
             <UL
               items={[
                 <>
-                  <Tex t='s(t)' /> 가 0→1 로 매끄럽게 — 경계조건 6개를{' '}
-                  <b>5차 다항식</b>으로 만족
+                  A→B로 <A>갑자기</A> 점프하면? 무한 가속 → 무한 토크 →
+                  충격·진동.
                 </>,
                 <>
-                  <Tex t='s(0)=0,\ s(T)=1' /> 그리고 <Tex t='\dot s,\ddot s' />{' '}
-                  가 양 끝에서 <A>0</A>
+                  관절이 <b>천천히 출발해 천천히 멈추는</b> 부드러운 시간함수가
+                  필요.
                 </>,
                 <>
-                  관절 목표:{' '}
-                  <Tex t='\theta_d(t)=\theta_0+s(t)\,(\theta_1-\theta_0)' />
+                  경로(어디를 지나갈지) + <A>타임스케일링</A>(언제 얼마나 빨리)
+                  로 분리.
                 </>,
               ]}
             />
-            <Eq t='s(t)=a_3t^3+a_4t^4+a_5t^5' />
             <Ex>
-              우리 코드: <Tex t='quintic\_time\_scaling(t,T)' /> 가{' '}
-              <Tex t='(s,\dot s,\ddot s)' /> 를 반환 → 구간별 보간.
+              목표: 시작·끝에서 <b>속도 0, 가속도 0</b> — 덜컹임 없이 출발/정지.
             </Ex>
           </>
         }
-        r={<Fig svg={QUINTIC} cap='위치 S커브 · 속도 종모양' />}
+        r={<Fig svg={QUINTIC} cap='5차 다항식 — 위치 S커브 · 속도 종모양' />}
       />
     ),
   },
-
   /* ───────── 6. 제어 ───────── */
   {
     title: '⑥ 제어 ',
@@ -857,7 +953,7 @@ const SLIDES: S[] = [
     ),
   },
   {
-    title: '관절공간 제어기 — 3종',
+    title: '관절공간 제어',
     body: (
       <>
         <UL
@@ -877,51 +973,6 @@ const SLIDES: S[] = [
           ]}
         />
         <Eq t='\tau=M(\theta)\big(\ddot\theta_d+K_p e+K_d\dot e+K_i\!\textstyle\int e\big)+c+g' />
-      </>
-    ),
-  },
-  {
-    title: '파라미터를 바꾸면? — 실측 반응',
-    body: (
-      <>
-        <table className='w-full border-collapse text-[1.0rem]'>
-          <thead>
-            <tr className='bg-card text-sky-600'>
-              <th className='border-border border p-2 text-left'>Pamameter</th>
-              <th className='border-border border p-2 text-left'>
-                관찰되는 반응
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              ['Kp ↑', '빠르게 도달하지만 오버슛·진동 ↑'],
-              ['Kd ↑', '진동 잡힘 — 그러나 센서 노이즈에 토크 chatter ↑'],
-              ['Ki ↑', '잔류오차 제거 — Ki > Kp·Kd 넘으면 발산 (Routh)'],
-              [
-                '제어율 ↓ (1000→500Hz)',
-                '게인 그대로인데 발산 — sim-to-real 절벽',
-              ],
-              [
-                '자동튜닝 ts ↓ (0.3→0.2s)',
-                'Kp 폭증(178→400) → 더 빠른 제어보드 요구',
-              ],
-            ].map((r, i) => (
-              <tr key={i}>
-                <td className='border-border border p-1.5 font-semibold'>
-                  {r[0]}
-                </td>
-                <td className='border-border text-muted-foreground border p-1.5'>
-                  {r[1]}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <Ex>
-          <b>핵심:</b> 발산은 버그가 아니라 “이 목표면 제어보드가 몇 Hz는 돼야
-          한다”는 신호.
-        </Ex>
       </>
     ),
   },
@@ -951,7 +1002,7 @@ const SLIDES: S[] = [
   {
     body: (
       <Cols
-        title='임피던스 ↔ 어드미턴스 — 환경과의 대화'
+        title='임피던스 ↔ 어드미턴스'
         l={
           <>
             <UL
@@ -981,13 +1032,123 @@ const SLIDES: S[] = [
   {
     body: (
       <Cols
+        title='임피던스 ↔ 어드미턴스'
+        l={
+          <>
+            <UL
+              items={[
+                <>
+                  <b>임피던스(impede=막다)</b> vs{' '}
+                  <b>어드미턴스(admit=받아들이다)</b>
+                </>,
+                <>
+                  힘 <Tex t='F' />
+                  =전압 <Tex t='V' />
+                  (밀어붙임), 속도 <Tex t='v' />
+                  =전류 <Tex t='I' />
+                  (흐름)
+                </>,
+                <>
+                  <b>임피던스</b>: 흐름(움직임)을 강제하면 얼마나 <A>버티나</A>{' '}
+                  → 로봇=스프링, “밀면 버틴다”
+                </>,
+                <>
+                  <b>어드미턴스</b>: 압력(힘)을 걸면 얼마나 <A>순순히 흐르나</A>{' '}
+                  → 로봇=양보, “밀면 비켜준다”
+                </>,
+              ]}
+            />
+            <Ex>
+              외력이 오면 — <b>임피던스는 버티고(저항)</b>,{' '}
+              <b>어드미턴스는 “지나가세요” 비켜준다(양보)</b> <br />
+              <A>딱딱한 벽</A>엔 어드미턴스(같이 뻐팅기면 힘 폭발),{' '}
+              <A>무른·자유공간</A>엔 임피던스가 어울린다
+            </Ex>
+          </>
+        }
+        r={
+          <div className='space-y-3'>
+            <div className='border-border bg-card overflow-hidden rounded-xl border shadow-lg'>
+              <table className='w-full text-left text-[0.95rem]'>
+                <thead>
+                  <tr className='border-border bg-muted/40 border-b'>
+                    <th className='px-3 py-1.5 font-semibold'>대응</th>
+                    <th className='px-3 py-1.5 font-semibold'>전기회로</th>
+                    <th className='px-3 py-1.5 font-semibold'>기계 · 로봇</th>
+                  </tr>
+                </thead>
+                <tbody className='[&_td]:border-border [&_td]:border-t [&_td]:px-3 [&_td]:py-1.5'>
+                  <tr>
+                    <td>밀어붙임(effort)</td>
+                    <td>
+                      전압 <Tex t='V' />
+                    </td>
+                    <td>
+                      힘 <Tex t='F' />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>흐름(flow)</td>
+                    <td>
+                      전류 <Tex t='I' />
+                    </td>
+                    <td>
+                      속도 <Tex t='v' />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      임피던스 <Tex t='Z' /> (막음)
+                    </td>
+                    <td>
+                      <Tex t='V/I' />
+                    </td>
+                    <td>
+                      <Tex t='F/v' />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      어드미턴스 <Tex t='Y' /> (들임)
+                    </td>
+                    <td>
+                      <Tex t='I/V' />
+                    </td>
+                    <td>
+                      <Tex t='v/F' />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>관성 · 감쇠 · 강성</td>
+                    <td>
+                      <Tex t='L' /> · <Tex t='R' /> · <Tex t='1/C' />
+                    </td>
+                    <td>
+                      <Tex t='m' /> · <Tex t='b' /> · <Tex t='k' />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className='text-muted-foreground text-center text-sm'>
+              임피던스 = 움직임 넣어 힘 받음(버팀) · 어드미턴스 = 힘 넣어 움직임
+              받음(양보)
+            </div>
+          </div>
+        }
+      />
+    ),
+  },
+  {
+    body: (
+      <Cols
         title='힘 & 하이브리드 제어 — 표면 작업'
         l={
           <>
             <UL
               items={[
                 <>
-                  <b>힘 제어:</b> 벽을 <A>목표 힘(20N)</A>으로 일정하게 누름
+                  <b>힘 제어:</b> 벽을 <A>목표 힘</A>으로 일정하게 누름
                 </>,
                 <>
                   <b>하이브리드:</b>{' '}
@@ -1006,59 +1167,10 @@ const SLIDES: S[] = [
 
   /* ───────── 7. 연동 · 시연 ───────── */
   {
-    title: '실무 연동 — ROS 2 · Isaac Sim',
-    body: (
-      <table className='w-full border-collapse text-[1.02rem]'>
-        <thead>
-          <tr className='bg-card text-sky-600'>
-            <th className='border-border border p-2 text-left'>기능</th>
-            <th className='border-border border p-2 text-left'>ROS 2</th>
-            <th className='border-border border p-2 text-left'>Isaac Sim</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[
-            ['FK / IK', 'MoveIt (KDL·TracIK)', 'Lula Kinematics'],
-            [
-              '관절공간',
-              'joint_trajectory_controller',
-              'ArticulationController (PD drive)',
-            ],
-            [
-              '작업공간 직선',
-              'MoveIt computeCartesianPath',
-              'RmpFlow · LulaTrajectory',
-            ],
-            ['작업공간 속도제어', 'moveit_servo (Twist)', 'RmpFlow · Jacobian'],
-            ['동역학 M,c,g', 'ros2_control (effort)', 'physics tensor API'],
-            [
-              '임피던스/어드미턴스',
-              'cartesian_compliance / admittance',
-              'joint drive stiffness·damping',
-            ],
-            [
-              '힘 / 하이브리드',
-              'cartesian_force_controller',
-              'effort + PhysX contact',
-            ],
-          ].map((r, i) => (
-            <tr key={i}>
-              <td className='border-border text-muted-foreground border p-1.5'>
-                {r[0]}
-              </td>
-              <td className='border-border border p-1.5'>{r[1]}</td>
-              <td className='border-border border p-1.5'>{r[2]}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    ),
-  },
-  {
     body: (
       <div className='text-center'>
         <h1 className='my-8 text-8xl font-extrabold tracking-tight'>
-          Q &amp; A
+          시연 및 Q &amp; A
         </h1>
         <div className='text-3xl font-semibold'>감사합니다 🙇</div>
         <div className='text-muted-foreground mt-3 text-lg'></div>
@@ -1359,7 +1471,10 @@ export default function Slides() {
       </div>
 
       <div className='text-muted-foreground absolute right-0 bottom-0 left-0 z-10 flex items-center justify-between px-5 py-2 text-sm'>
-        <Link to='/' className='pointer-events-auto hover:text-sky-600'>
+        <Link
+          to='/simulation'
+          className='pointer-events-auto hover:text-sky-600'
+        >
           ← 시뮬레이터
         </Link>
         <span className='pointer-events-auto flex items-center gap-2'>
