@@ -1,100 +1,125 @@
-# UR5_Unity
-<p align="center">
-  <img src="tutorial.gif" width="80%">
-  <img src="tutorial_2.gif" width="80%">
+# Robot Web Simulator
 
+스크류 이론(Modern Robotics) 기반의 **로봇 기구학·동역학·제어 웹 시뮬레이터**.
+직접 구현한 `robot_math` 라이브러리(FastAPI 백엔드)로 무거운 시뮬레이션을 한 번에
+계산하고, React + react-three-fiber 프런트가 실제 URDF 메시를 렌더하며 결과 θ(t)를
+브라우저에서 재생한다.
 
-</p>  
+**멀티로봇 지원** — UR5(6축) · Franka Panda · KUKA iiwa14(각 7축) · OpenManipulator-X(4축).
+같은 엔진이 축 수와 무관하게 동작한다.
 
-**Numerical IK로 생성한 UR5 로봇의 Trajectory를  Unity에서 실시간 시각화**하는 프로젝트입니다.  
-Python에서 생성한 trajectory를 JSON으로 전송하면, Unity에서 해당 데이터를 수신하여 UR5 3D 모델이 움직입니다.   
-[**Youtube link**](https://youtu.be/c5draOBLXvA)
-
----
-
-## 🛠 주요 기능
-
-- UR5 3D 모델 기반 Unity 시뮬레이션
-- Python에서 수치 역기구학으로 생성한 trajectory(JSON) 송신
-- TCP Socket 기반 실시간 통신
-- 수신된 데이터를 기반으로 Unity 내 로봇 동작
-- **Screw theory 기반 동역학 엔진** (RNE 역/순동역학, 질량·코리올리·중력 항)
-- **제어 데모** — 중력보상 · PD · Computed Torque 궤적추종 (Unity 없이 순수 Python + matplotlib)
+> 핵심 원칙: **무거운 계산(시뮬)은 백엔드에서 한 번, 브라우저는 그 결과만 재생.**
+> 관절 슬라이더 조그는 브라우저 FK(urdf-loader)로 처리해 프레임당 통신이 0이다.
 
 ---
 
-## 🛠️ 실행 환경
+## ✨ 기능
 
-* Python 3.12+
-* `numpy`, `scipy`, `matplotlib`, `pyside6`
-* 패키지 관리: [`uv`](https://docs.astral.sh/uv/)
+**기구학**
+- 정기구학(FK) — PoE 지수곱(`T = e^{[S₁]θ₁}···M`), URDF에서 스크류축 직접 추출
+- 역기구학(IK) — 수치 IK(Newton-Raphson) + **DLS**(특이점 감쇠), manipulability(`w=√det(JJᵀ)`, σ_min) 라이브 표시
+- 직교좌표 ↔ 관절각 양방향 라이브 변환(PoseEditor)
+
+**동역학**
+- RNE 역/순동역학 — `inverse_dynamics` · `mass_matrix` · `gravity_forces` · `coriolis_forces` · `forward_dynamics`
+- **Numba JIT 가속**(`forward_dynamics` ~3.5ms→~254µs ≈14×, 연속 시뮬 ~7× 단축), numpy 구현과 비트일치(pytest parity)
+
+**제어기 (한 시뮬 엔진, 로봇 무관)**
+- 토크: **PD+중력보상 · PID · Computed Torque · 임피던스**
+- 모션: **작업공간 속도제어(resolved-rate) · 어드미턴스**
+- 접촉: **힘 제어 · 하이브리드 모션/힘**(법선=힘, 접선=위치 투영 분리)
+- 자동튜닝(극배치), ζ·ωₙ 배지, 적분 안정여유(Routh)
+
+**궤적 · 환경**
+- 관절/작업공간(직교 직선) 궤적, 5차 다항식 타임스케일링
+- 현실 모델 — 관절 마찰·토크 포화, 이산 ZOH 제어율, 센서 노이즈
+- **하이브리드 컨투어** — 곡면(평면/원기둥/구) 또는 업로드 메시(STL/OBJ)에 마우스로 경로를 그려 일정 힘으로 추종
+
+**그 외**
+- 발표 슬라이드(`/slides`) — 관절~제어 개념을 실제 3D 로봇과 함께 설명
+- 단일 포트 서빙 + 선택적 로그인 인증(`SIM_KEY`)
+
+---
+
+## 🧱 기술 스택
+
+| | |
+|---|---|
+| 백엔드 | Python 3.12+ · FastAPI · SQLModel(SQLite) · NumPy/SciPy · Numba · trimesh · yourdfpy · [`uv`](https://docs.astral.sh/uv/) |
+| 프런트 | React 19 · react-three-fiber v9 · drei v10 · urdf-loader · Vite · TailwindCSS · shadcn-style UI · pnpm |
+
+---
+
+## 🚀 빠른 시작
+
+두 서버를 같이 띄운다(프런트는 자체 데이터가 없고 `/api`·`/meshes`를 백엔드로 프록시).
 
 ```bash
-# pythonscript 폴더에서
-uv sync
+# 1) 백엔드  (http://localhost:8500/docs = Swagger)
+cd backend
+uv sync            # 최초 1회
+uv run main.py
+
+# 2) 프런트  (Vite 개발 서버)
+cd frontend
+pnpm install       # 최초 1회
+pnpm dev
 ```
+
+### 단일 포트 배포 (프록시 불필요)
+
+```bash
+cd frontend && pnpm build      # → frontend/dist
+cd backend  && uv run main.py  # dist 를 같은 출처로 서빙 (프런트+API 한 포트)
+```
+
+- 접근 제어: `backend/.env`의 `SIM_KEY` 설정 시 시뮬 실행·쓰기에 로그인 필요(슬라이드·읽기는 공개). 빈 값이면 인증 OFF.
+- LAN 공유: `HOST`/`PORT` 환경변수(기본 `0.0.0.0:8500`).
+
+### 라우트
+
+| 경로 | 내용 |
+|---|---|
+| `/` | `/slides` 로 리다이렉트 |
+| `/simulation` | 시뮬레이터 (인증 보호 대상) |
+| `/slides` | 발표 슬라이드 (공개) |
+| `/docs` | FastAPI Swagger |
+
 ---
 
-## 🔧 시스템 구조
+## 🗂 구조
 
 ```text
-[Python Script] ──> (Socket, JSON) ──> [Unity]
-```
----
+backend/
+├─ app/
+│  ├─ core/        robot_math · ur5_model · robot_model · robot_registry · urdf_loader · paths
+│  ├─ routers/     robot · robots · kinematics · programs · simulate · mesh
+│  ├─ controllers/ kinematics · programs · simulate
+│  ├─ sim.py       시뮬레이션 엔진(solve_ivp, 제어 루프) · dynamics_fast.py(numba RNE)
+│  ├─ realism.py   plant≠controller 모델 불확실성 · mesh_store.py(업로드 메시)
+│  └─ models.py · schemas.py · db.py · meshes_setup.py · main.py
+├─ demos/          standalone 제어·시각화 데모 (matplotlib)
+└─ pyproject.toml · uv.lock
 
-## 🚀 실행 방법
-
-- UR5_RUN 폴더 내에 Unity Bulid UR5 실행   
-- python 실행 전 까지 TCP 수신 대기   
-- pythonControl 폴더 내 UR5_QT.py 실행   
-- IP, PORT(5000) 입력하여 Unity 연결(localhost = 127.0.0.1)   
-- pose, jointangle 슬라이더 조정하여 자세 저장   
-- 실행 시 순서대로 Numerical IK 계산 후 trajectory 생성   
-- UR5 오브젝트 실시간 동작 확인   
-
----
-
-## 🧮 동역학 · 제어 데모 (Python, Unity 불필요)
-
-Modern Robotics(screw theory) 기반으로 구현한 동역학 엔진과 제어 데모.
-순동역학을 plant 로 삼아 Python 안에서 제어 루프를 닫는다 (`scipy.solve_ivp` 적분).
-
-```bash
-# pythonscript 폴더에서 (모든 데모는 demos/, 산출물은 outputs/)
-python demos/gravity_demo.py        # 중력 토크 g(θ) 물리검증
-python demos/control_demo.py        # 무제어 / 중력보상 / PD 비교
-python demos/tracking_demo.py       # Computed Torque vs PD 추종
-python demos/pid_demo.py            # PID (I항이 중력 인계)
-python demos/damping_demo.py        # 감쇠비 ζ 효과
-python demos/full_pipeline.py       # 원하는자세 → IK → 경로 → 제어 → 도달
-python demos/multi_waypoint_demo.py # 경유점 순회
-python demos/ik_solutions_demo.py   # 한 자세의 다중 IK 해
-
-# 실제 UR5 URDF 메시 시각화 (yourdfpy, 범용)
-python demos/urdf_view.py           # 정적 (어떤 robot_descriptions 든)
-python demos/urdf_dynamics_anim.py  # 동역학 3막 (낙하 / 중력보상 / CT)
-python demos/urdf_multi_waypoint.py # PID 경유점 순회 (메시)
-python demos/urdf_pid_anim.py       # PD vs PID (메시)
-python demos/urdf_impedance_anim.py # 임피던스 stiff vs soft (메시)
+frontend/app/
+├─ components/  RobotView · ControlPanel · PoseEditor · ProgramList · Plots · Slides · WallPlane …
+├─ api.ts · store.ts · root.tsx · main.web.tsx
 ```
 
-- `robot_math.py` — `SO3`/`SE3`/`Kinematics`/`Dynamics` (Lie 군·대수 구조로 분리)
-- `robots.py` — UR5 기구학 모델 / `ur5_model.py` — UR5 동역학 파라미터(MR, SI 단위) + FK/IK
-- 상세 설명: [`docs/Inverse_Dynamics.md`](pythonscript/docs/Inverse_Dynamics.md)
+주요 엔드포인트: `GET /api/robots` · `POST /api/ik` · `POST /api/fk` · `GET/POST/DELETE /api/programs/...` · `POST /api/run`(시뮬) · `POST /api/mesh`(메시 업로드).
+
+백엔드 설계·아키텍처는 [`backend/WEB_DESIGN.md`](backend/WEB_DESIGN.md) 참고.
 
 ---
 
-## 📌 수정 사항
+## 📝 메모
 
-- SQLite DB 추가해서 Qt GUI 종료해도 이전 저장 값 유지   
-- euler angle 해석, 동작하는 부분 quaternion으로 변경( Gimbol Lock 회피 용이 )   
-- Reset 버튼 추가해서 프로그램 리셋 기능 구현   
-- pyinstaller로 최종 exe 파일 Build 및 Release   
+- UR5의 **영점(전관절 0) 자세는 특이점**이라 시작 시 σ_min=0 경고는 정상. 운용 시작은 비특이 `READY` 자세.
+- `Pose` 등 DB 스키마 변경 시 `backend/robot.db` 삭제 후 재시작(`create_all`은 ALTER 안 함).
+- 런타임 산출물(`robot.db` · `app/meshes/` · `outputs/` · `node_modules` · `dist`)은 gitignore.
 
 ---
 
 ## 🔗 License
 
-MIT License. Free to use, modify, and learn from.
-
----
+MIT License.
