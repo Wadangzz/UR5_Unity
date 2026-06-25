@@ -325,10 +325,15 @@ export default function App() {
   const [ready, setReady] = useState<number[]>([]); // 비특이 운용 출발 자세
   const [noiseSeed, setNoiseSeed] = useState(0); // 노이즈 realization seed
   const [interactive, setInteractive] = useState(false); // 실시간 grab & push 모드
-  // 인터랙티브 중엔 지원 제어기만 노출(조용한 PD 폴백 방지)
-  const controllers = interactive
-    ? CONTROLLERS.filter((c) => INTERACTIVE_CTRL.includes(c.name))
-    : CONTROLLERS;
+  // 인터랙티브 중엔 지원 제어기만 노출(조용한 PD 폴백 방지).
+  // useMemo 필수: 매 렌더 새 배열이면 게인 effect(deps=controllers)가 무한루프.
+  const controllers = useMemo(
+    () =>
+      interactive
+        ? CONTROLLERS.filter((c) => INTERACTIVE_CTRL.includes(c.name))
+        : CONTROLLERS,
+    [interactive],
+  );
 
   // 발표↔시뮬 라우트 전환(App 언마운트)·새로고침에도 유지 — zustand store (app/store.ts)
   const robotId = useSim((s) => s.robotId);
