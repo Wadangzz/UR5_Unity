@@ -20,10 +20,10 @@ from app.core import dynamics_fast as df
 from app.core.robot_math import SE3
 from app.sim import OMEGA_MAX, THETA_MAX
 
-# 물리 적분 dt 상한(s). explicit Euler 는 조건부 안정이라 감쇠항 Kd·Jb·θ̇ 가 stiff
-# → 기본 게인(Kp600 Kd60)이 안정하려면 ~2kHz 필요. 스트리밍 dt 를 이 값으로 서브스텝.
-# (이보다 게인을 크게 올리면 그래도 발산 = 이산 불안정 시연 — honest 모드가 잡아냄)
-PHYS_DT = 0.0005            # 2kHz 물리
+# 물리 적분 dt 상한(s). 감쇠항(Kd·θ̇)을 암시적으로 풀어(implicit) explicit Euler 의
+# stiff 발산을 없앴다 → 1kHz 에서도 기본게인 안정 + 실시간(~0.4x). 스트리밍 dt 를 서브스텝.
+# (그래도 게인을 크게 올리면 강성항(explicit)이 발산 = 이산 불안정 시연 — honest 가 잡음)
+PHYS_DT = 0.001            # 1kHz 물리 (암시적 감쇠로 안정)
 
 # safe 모드 기본 안전 한계 (UR5 기준 보수값)
 TAU_MAX_SAFE = 150.0        # 관절 토크 포화 N·m
@@ -66,24 +66,28 @@ class InteractiveSession:
     def _g(self, th):
         return df.gravity_forces(th, self.robot.gravity, *self.cm)
 
-    def _control_torque(self, th, dth):
-        """setpoint 유지 제어토크 (dth_d=0). _run_torque 의 torque 법칙과 동일 형태."""
+    def _control_split(self, th, dth, M):
+        """제어토크를 비감쇠부 τ_other 와 관절공간 감쇠행렬 D_eff 로 분리한다.
+        실제 명령토크 = τ_other − D_eff·θ̇ (기존 _run_torque 법칙과 동일).
+        감쇠항이 explicit Euler 에서 stiff → 암시적으로 풀려고 떼어낸다.
+            pd/pid : D_eff = Kd·I          impedance : D_eff = Kd·Jbᵀ·Jb
+            ct     : D_eff = Kd·M (CT 감쇠 = M·Kd·θ̇)
+        """
         Kp, Kd, Ki = self.Kp, self.Kd, self.Ki
-        e, ed = self.th_d - th, -dth
+        e = self.th_d - th
+        g = self._g(th)
+        n = self.robot.n
         c = self.controller
-        if c == "computed_torque":
-            aq = Kd * ed + Kp * e + Ki * self.I
-            M = df.mass_matrix(th, *self.cm)
-            cor = df.coriolis_forces(th, dth, *self.cm)
-            return M @ aq + cor + self._g(th)
-        if c == "pid":
-            return Kp * e + Ki * self.I + Kd * ed + self._g(th)
         if c == "impedance":
-            # 직교 임피던스: τ = Jbᵀ(Kp·Verr − Kd·Jb·θ̇) + g, Verr=log(T⁻¹·T_d)
             Verr = SE3.log(np.linalg.inv(self.robot.fk(th)) @ self.T_d)[0]
             Jb = self.robot.jacobian_body(th)
-            return Jb.T @ (Kp * Verr - Kd * (Jb @ dth)) + self._g(th)
-        return Kp * e + Kd * ed + self._g(th)    # pd
+            return Jb.T @ (Kp * Verr) + g, Kd * (Jb.T @ Jb)
+        if c == "computed_torque":
+            cor = df.coriolis_forces(th, dth, *self.cm)
+            return M @ (Kp * e + Ki * self.I) + cor + g, Kd * M
+        if c == "pid":
+            return Kp * e + Ki * self.I + g, Kd * np.eye(n)
+        return Kp * e + g, Kd * np.eye(n)        # pd
 
     def _result(self, flags):
         ee = self.robot.fk(self.th)
@@ -95,14 +99,13 @@ class InteractiveSession:
         }
 
     def step(self, grab_force=None, dt=0.01, substeps=None):
-        """1틱 전진(스트리밍 dt). 내부에서 물리를 ≥2kHz(PHYS_DT)로 서브스텝 적분 —
-        전진오일러는 조건부 안정이라 한 방이면 고게인서 수치 발산(실시간 시뮬 표준 기법).
+        """1틱 전진(스트리밍 dt). 물리를 ≥1kHz(PHYS_DT)로 서브스텝, 감쇠는 암시적이라 안정.
         grab_force = EE 에 가하는 base 프레임 외력(3-vec, N).
         → {theta, ee_pos, flags, diverged}."""
         if self.dead:                            # 보호정지 후엔 동결
             return self._result(["protective_stop"])
         if substeps is None:
-            substeps = max(1, int(np.ceil(dt / PHYS_DT)))   # 물리 ≥ 2kHz
+            substeps = max(1, int(np.ceil(dt / PHYS_DT)))   # 물리 ≥ 1kHz
         h = dt / substeps
         flags = set()
         for _ in range(substeps):
@@ -112,17 +115,11 @@ class InteractiveSession:
         return self._result(sorted(flags))
 
     def _substep(self, grab_force, dt, flags):
-        """물리 한 스텝(작은 dt). 제어→포화→plant→리밋→발산판정. flags 누적(set)."""
+        """물리 한 스텝. 감쇠 암시적: (M+h·D_eff)·θ̇⁺ = M·θ̇ + h·(τ_other − bias).
+        토크 포화 시엔 클립 토크로 명시적 적분(포화가 봉쇄 역할). flags 누적(set)."""
         th, dth = self.th, self.dth
-        tau = self._control_torque(th, dth)
-
-        if self.tau_max is not None:             # safe: 토크 포화
-            clip = np.clip(tau, -self.tau_max, self.tau_max)
-            if not np.array_equal(clip, tau):
-                flags.add("saturation")
-            tau = clip
-
-        # 잡기힘 = 로봇에 가하는 외력 → Ftip=−R·ᵀgrab (외란 부호 규약과 동일)
+        n = self.robot.n
+        # 잡기힘 = 로봇에 가하는 외력 → Ftip=−Rᵀ·grab (외란 부호 규약과 동일)
         grab = np.zeros(3) if grab_force is None else np.asarray(grab_force, float)
         if np.any(grab):
             f_ee = -self.robot.fk(th)[:3, :3].T @ grab
@@ -130,13 +127,28 @@ class InteractiveSession:
         else:
             Ftip = np.zeros(6)
 
-        ddth = df.forward_dynamics(th, dth, tau, self.robot.gravity, Ftip, *self.pm)
-        dth = dth + ddth * dt                    # semi-implicit Euler
-        th = th + dth * dt
+        M = df.mass_matrix(th, *self.pm)
+        bias = df.inverse_dynamics(th, dth, np.zeros(n),       # c + g + Jᵀ·Ftip
+                                   self.robot.gravity, Ftip, *self.pm)
+        tau_other, D_eff = self._control_split(th, dth, M)
 
+        if self.tau_max is not None:             # safe: 토크 포화 → 클립 후 명시적
+            tau_full = tau_other - D_eff @ dth
+            clip = np.clip(tau_full, -self.tau_max, self.tau_max)
+            if not np.array_equal(clip, tau_full):
+                flags.add("saturation")
+                ddth = np.linalg.solve(M, clip - bias)        # M·θ̈ = τ − bias
+                self._finish(th, dth + ddth * dt, dt, flags)
+                return
+        # 비포화: 감쇠항만 암시적으로 풀어 stiff 발산 제거
+        dth_new = np.linalg.solve(M + dt * D_eff, M @ dth + dt * (tau_other - bias))
+        self._finish(th, dth_new, dt, flags)
+
+    def _finish(self, th_old, dth, dt, flags):
+        """θ⁺=θ+h·θ̇⁺(semi-implicit), PID 적분, safe 리밋 클램프, 발산판정·상태저장."""
+        th = th_old + dt * dth
         if self.controller in ("pid", "computed_torque"):
             self.I = self.I + (self.th_d - th) * dt
-
         if self.mode == "safe":                  # 속도·관절 리밋 클램프
             vclip = np.clip(dth, -self.vel_max, self.vel_max)
             if not np.array_equal(vclip, dth):
@@ -147,7 +159,6 @@ class InteractiveSession:
                 flags.add("joint_limit")
                 dth = np.where(tclip != th, 0.0, dth)    # 한계서 정지
             th = tclip
-
         self.th, self.dth = th, dth
         # 발산 안전망(양 모드): 상태 폭주 → 보호정지
         if (not np.all(np.isfinite(th))
