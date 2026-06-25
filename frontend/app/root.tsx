@@ -7,7 +7,7 @@ import {
   type ComponentRef,
 } from 'react';
 import { Link } from 'react-router-dom';
-import { Canvas, type ThreeEvent } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import {
   OrbitControls,
   Grid,
@@ -22,6 +22,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   type Object3D,
+  Plane,
   Quaternion,
   Vector3,
 } from 'three';
@@ -55,6 +56,7 @@ import {
   type RunResponse,
 } from '@/api';
 import { useSim } from '@/store';
+import { useInteractive, type InteractiveFrame } from '@/useInteractive';
 
 type Wall = {
   shape: string;
@@ -240,6 +242,72 @@ function ForceArrow({ origin, vec }: { origin: number[]; vec: number[] }) {
   return <primitive object={arrow} />;
 }
 
+// 실시간 grab & push 핸들: EE 에 붙은 구를 마우스로 끌면 (마우스타깃−현재EE)에 비례한
+// 힘을 base 프레임으로 보낸다. 드래그 중엔 OrbitControls 를 꺼 카메라 회전을 막고,
+// 매 프레임 힘을 갱신(로봇이 따라와도 당김이 이어지게). EE 위치는 스트림(eePosRef)에서.
+function GrabHandle({
+  eePosRef,
+  onGrab,
+  onRelease,
+  setDragging,
+}: {
+  eePosRef: { current: number[] };
+  onGrab: (f: number[]) => void;
+  onRelease: () => void;
+  setDragging: (d: boolean) => void;
+}) {
+  const { camera } = useThree();
+  const dragging = useRef(false);
+  const plane = useRef(new Plane());
+  const target = useRef(new Vector3());
+  const mesh = useRef<Mesh>(null);
+  const K_DRAG = 500; // 당긴 거리→힘 (N/m)
+  const F_MAX = 80; // 잡기힘 상한 (N)
+
+  const ee = () =>
+    new Vector3(...(eePosRef.current as [number, number, number]));
+  const down = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    dragging.current = true;
+    setDragging(true);
+    const n = camera.getWorldDirection(new Vector3()).negate();
+    plane.current.setFromNormalAndCoplanarPoint(n, ee()); // 카메라 마주보는 평면
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+  const move = (e: ThreeEvent<PointerEvent>) => {
+    if (dragging.current) e.ray.intersectPlane(plane.current, target.current);
+  };
+  const up = (e: ThreeEvent<PointerEvent>) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    setDragging(false);
+    onRelease();
+    (e.target as Element).releasePointerCapture?.(e.pointerId);
+  };
+
+  useFrame(() => {
+    const m = mesh.current;
+    if (!m) return;
+    m.position.copy(ee()); // 핸들이 로봇 EE 를 따라감
+    if (!dragging.current) return;
+    const f = target.current.clone().sub(ee()).multiplyScalar(K_DRAG);
+    f.clampLength(0, F_MAX);
+    onGrab([f.x, f.y, f.z]);
+  });
+
+  return (
+    <mesh ref={mesh} onPointerDown={down} onPointerMove={move} onPointerUp={up}>
+      <sphereGeometry args={[0.05, 24, 24]} />
+      <meshStandardMaterial
+        color='#3b82f6'
+        transparent
+        opacity={0.5}
+        depthTest={false}
+      />
+    </mesh>
+  );
+}
+
 export default function App() {
   // 멀티로봇: 목록 + 선택. robotId 가 바뀌면 RobotView 를 key 로 remount → 재로드.
   const [robots, setRobots] = useState<RobotSummary[]>([]);
@@ -318,6 +386,13 @@ export default function App() {
   // 하이브리드 컨투어: 표면 미리보기(현재 자세 기준) + 표면에 그린 경로 점
   const [previewWall, setPreviewWall] = useState<Wall | null>(null);
   const [eePos, setEePos] = useState<number[] | null>(null); // 외란 화살표 앵커(EE 위치)
+  // 실시간 grab & push (인터랙티브 모드)
+  const [interactive, setInteractive] = useState(false);
+  const [intMode, setIntMode] = useState<'honest' | 'safe'>('honest');
+  const [intFlags, setIntFlags] = useState<string[]>([]);
+  const [intDiverged, setIntDiverged] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const eePosRef = useRef<number[]>([0, 0, 0]); // 스트림 EE (드래그 핸들 앵커)
   const drawnPath = useSim((s) => s.drawnPath);
   const setDrawnPath = useSim((s) => s.setDrawnPath);
   const addDrawPoint = (p: number[]) => setDrawnPath((prev) => [...prev, p]);
@@ -594,6 +669,26 @@ export default function App() {
   const runProgram = (programId: string) =>
     runReq({ program_id: programId, start: [...joints] });
 
+  // 인터랙티브 WS: θ 스트림을 받아 라이브 렌더(setJoints) + EE/플래그 갱신
+  const onIntFrame = useCallback(
+    (f: InteractiveFrame) => {
+      setJoints(f.theta);
+      eePosRef.current = f.ee_pos;
+      setIntFlags(f.flags);
+      setIntDiverged(f.diverged);
+    },
+    [setJoints],
+  );
+  const intConfig = useMemo(
+    () => ({ robot_id: robotId, controller, gains, mode: intMode }),
+    [robotId, controller, gains, intMode],
+  );
+  const {
+    connected: intConnected,
+    sendGrab,
+    reset: intReset,
+  } = useInteractive(interactive, intConfig, onIntFrame);
+
   return (
     <div className='bg-background relative h-screen w-screen'>
       <header className='pointer-events-none absolute top-0 left-0 z-10 p-4'>
@@ -635,6 +730,68 @@ export default function App() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+      </div>
+
+      {/* 실시간 잡고 밀기 토글 + 모드(정직/안전) + 개입 배지 — 상단중앙(셀렉터 아래) */}
+      <div className='absolute top-16 left-1/2 z-20 -translate-x-1/2'>
+        <div className='bg-card/95 supports-[backdrop-filter]:bg-card/80 flex items-center gap-3 rounded-lg border px-3 py-1.5 text-xs shadow-sm backdrop-blur'>
+          <button
+            type='button'
+            onClick={() => setInteractive((v) => !v)}
+            disabled={running}
+            className={`pointer-events-auto font-medium disabled:opacity-40 ${
+              interactive ? 'text-blue-600' : 'text-foreground'
+            }`}
+          >
+            🖐 잡고 밀기 {interactive ? 'ON' : 'OFF'}
+          </button>
+          {interactive && (
+            <>
+              <span
+                className={
+                  intConnected ? 'text-emerald-500' : 'text-muted-foreground'
+                }
+                title={intConnected ? '연결됨' : '연결 중…'}
+              >
+                ●
+              </span>
+              <div className='flex gap-1'>
+                {(['honest', 'safe'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type='button'
+                    onClick={() => setIntMode(m)}
+                    className={`pointer-events-auto rounded px-2 py-0.5 ${
+                      intMode === m
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {m === 'honest' ? '정직' : '안전'}
+                  </button>
+                ))}
+              </div>
+              <button
+                type='button'
+                onClick={intReset}
+                className='text-muted-foreground hover:text-foreground pointer-events-auto'
+              >
+                리셋
+              </button>
+              {intDiverged ? (
+                <span className='font-semibold text-red-600'>
+                  ⚠ 발산 · 보호정지
+                </span>
+              ) : (
+                intFlags.length > 0 && (
+                  <span className='font-medium text-amber-600'>
+                    ⚠ {intFlags.join(' · ')}
+                  </span>
+                )
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -709,14 +866,14 @@ export default function App() {
             robotId={robotId}
             joints={joints}
             onSolved={setJoints}
-            running={running}
+            running={running || interactive}
             live={live}
           />
           <JointPanel
             meta={meta}
             joints={joints}
             onChange={setJoint}
-            running={running}
+            running={running || interactive}
           />
         </div>
         <ProgramList
@@ -820,8 +977,19 @@ export default function App() {
           />
         </GizmoHelper>
 
+        {/* 인터랙티브 모드: EE 드래그 핸들 (잡고 밀기). 드래그 중 OrbitControls off */}
+        {interactive && (
+          <GrabHandle
+            eePosRef={eePosRef}
+            onGrab={sendGrab}
+            onRelease={() => sendGrab([0, 0, 0])}
+            setDragging={setDragging}
+          />
+        )}
+
         <OrbitControls
           ref={onControls}
+          enabled={!dragging}
           enableDamping
           makeDefault
           onEnd={saveCam}

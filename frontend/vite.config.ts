@@ -15,6 +15,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8500',
       '/meshes': 'http://localhost:8500',
+      '/ws': { target: 'ws://localhost:8500', ws: true }, // 실시간 grab&push 스트림
     },
   },
 });
