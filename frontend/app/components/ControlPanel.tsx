@@ -597,7 +597,9 @@ export default function ControlPanel({
                 ? 'Run ▶  벽 누르며 선 긋기'
                 : controller === 'force'
                   ? 'Run ▶  현재자세에서 벽 누름'
-                  : 'Run ▶  ready → 현재자세'}
+                  : controller === 'impedance' || controller === 'admittance'
+                    ? 'Run ▶  현재자세 정지 → 외란'
+                    : 'Run ▶  ready → 현재자세'}
           </Button>
           <div className='flex gap-2'>
             <Button

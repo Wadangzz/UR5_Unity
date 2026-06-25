@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentRef,
@@ -15,6 +16,7 @@ import {
   Line,
 } from '@react-three/drei';
 import {
+  ArrowHelper,
   Box3,
   DoubleSide,
   Mesh,
@@ -211,6 +213,33 @@ function DrawnPath({ points }: { points: number[][] }) {
   );
 }
 
+// 외란(외력) 화살표: EE 에 작용하는 base 프레임 힘 벡터. 꼬리=EE, 머리=미는 방향.
+// 길이 ∝ 크기(슬라이더 ±80N → ~0.45m). 씬이 Z-up base 프레임이라 push 를 그대로 그린다.
+function ForceArrow({ origin, vec }: { origin: number[]; vec: number[] }) {
+  const arrow = useMemo(
+    () =>
+      new ArrowHelper(
+        new Vector3(1, 0, 0),
+        new Vector3(),
+        1,
+        0xf97316, // 주황 — 외력
+        0.05,
+        0.035,
+      ),
+    [],
+  );
+  const mag = Math.hypot(vec[0], vec[1], vec[2]);
+  useEffect(() => {
+    if (mag < 1e-6) return;
+    const len = 0.1 + (mag / 80) * 0.35;
+    arrow.position.set(origin[0], origin[1], origin[2]);
+    arrow.setDirection(new Vector3(vec[0], vec[1], vec[2]).normalize());
+    arrow.setLength(len, len * 0.28, len * 0.18);
+  }, [arrow, origin, vec, mag]);
+  if (mag < 1e-6) return null;
+  return <primitive object={arrow} />;
+}
+
 export default function App() {
   // 멀티로봇: 목록 + 선택. robotId 가 바뀌면 RobotView 를 key 로 remount → 재로드.
   const [robots, setRobots] = useState<RobotSummary[]>([]);
@@ -288,6 +317,7 @@ export default function App() {
   };
   // 하이브리드 컨투어: 표면 미리보기(현재 자세 기준) + 표면에 그린 경로 점
   const [previewWall, setPreviewWall] = useState<Wall | null>(null);
+  const [eePos, setEePos] = useState<number[] | null>(null); // 외란 화살표 앵커(EE 위치)
   const drawnPath = useSim((s) => s.drawnPath);
   const setDrawnPath = useSim((s) => s.setDrawnPath);
   const addDrawPoint = (p: number[]) => setDrawnPath((prev) => [...prev, p]);
@@ -429,6 +459,17 @@ export default function App() {
     running,
   ]);
 
+  // 외란 화살표 앵커: idle 일 때 현재 자세 FK 로 EE 위치 갱신(재생 중엔 live 사용).
+  useEffect(() => {
+    if (running || joints.length === 0) return;
+    const id = setTimeout(() => {
+      fk(joints, robotId)
+        .then((r) => setEePos(r.pose.slice(0, 3)))
+        .catch(() => {});
+    }, 150);
+    return () => clearTimeout(id);
+  }, [joints, robotId, running]);
+
   // 로봇 전환: 이전 결과/라이브 표시 비우고 robotId 변경(→ RobotView remount).
   // 관절각은 RobotView 가 새 로봇 ready 를 onLoaded 로 보고하면 거기서 초기화된다.
   const onRobotChange = (id: string) => {
@@ -536,10 +577,16 @@ export default function App() {
         force_task: ft,
       });
     } else {
+      // 임피던스/어드미턴스는 현재자세에 정지한 채 외란 반응만 본다(스윕 불필요).
+      // 그 외 제어기는 ready → 현재자세 스윕으로 추종 거동을 보여준다.
+      const compliant =
+        controller === 'impedance' || controller === 'admittance';
       runReq(
         isForceCtrl
           ? { waypoints: [[...joints]], force_task: ft }
-          : { waypoints: [ready, [...joints]] },
+          : compliant
+            ? { waypoints: [[...joints]] }
+            : { waypoints: [ready, [...joints]] },
       );
     }
   };
@@ -733,6 +780,20 @@ export default function App() {
           />
         )}
         <DrawnPath points={drawnPath} />
+
+        {/* 외란(외력) 벡터: 힘/하이브리드 외 제어기에서 push≠0 이면 EE 에 화살표 표시.
+            재생 중엔 live EE, 평소엔 FK EE 에 앵커. (힘/하이브리드는 벽 force_task 사용) */}
+        {controller !== 'force' &&
+          controller !== 'hybrid' &&
+          push.some((v) => v !== 0) &&
+          (running && live ? live.pose.slice(0, 3) : eePos) && (
+            <ForceArrow
+              origin={
+                (running && live ? live.pose.slice(0, 3) : eePos) as number[]
+              }
+              vec={push}
+            />
+          )}
 
         {/* 로봇 베이스 프레임 좌표축 (Z-up: X 빨강·Y 초록·Z 파랑) */}
         <axesHelper args={[0.4]} />
