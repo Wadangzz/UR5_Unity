@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Euler, MathUtils, Quaternion } from 'three';
+import { Euler, MathUtils, Quaternion, Vector3 } from 'three';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { fk, ik } from '@/api';
@@ -55,16 +55,12 @@ const FIELDS: {
   },
 ];
 
-const toPose7 = (p: Pose6): number[] => {
-  const q = new Quaternion().setFromEuler(
-    new Euler(
-      MathUtils.degToRad(p.rx),
-      MathUtils.degToRad(p.ry),
-      MathUtils.degToRad(p.rz),
-      'XYZ',
-    ),
-  );
-  return [p.x, p.y, p.z, q.x, q.y, q.z, q.w];
+// RX/RY/RZ 편집은 절대 오일러 재합성 대신 base(월드) 축 증분 회전으로 합성한다
+// → 각 축이 독립적으로 동작(자유도 상실 없음 = 짐벌락 없음). 위치 X/Y/Z 와 같은 base 프레임.
+const AXES: Record<'rx' | 'ry' | 'rz', Vector3> = {
+  rx: new Vector3(1, 0, 0),
+  ry: new Vector3(0, 1, 0),
+  rz: new Vector3(0, 0, 1),
 };
 
 const fromPose7 = (pose: number[]): Pose6 => {
@@ -101,6 +97,7 @@ export default function PoseEditor({
   const [sigma, setSigma] = useState<number | null>(null); // σ_min
 
   const latest = useRef<number[] | null>(null); // 마지막 IK 목표 pose7
+  const quatRef = useRef(new Quaternion()); // 현재 자세(권위 쿼터니언) — 편집은 여기에 증분
   const inFlight = useRef(false);
   const editedAt = useRef(0); // 마지막 사용자 편집 시각(ms)
   const jointsRef = useRef(joints);
@@ -140,6 +137,12 @@ export default function PoseEditor({
       setSigma(r.sigma_min); // 현재 자세의 특이점 근접도 (항상 갱신)
       // 사용자가 편집 중이거나 IK 진행 중이면 표시 갱신 보류 (충돌 방지)
       if (!inFlight.current && Date.now() - editedAt.current > 300) {
+        quatRef.current = new Quaternion(
+          r.pose[3],
+          r.pose[4],
+          r.pose[5],
+          r.pose[6],
+        );
         setPose(fromPose7(r.pose));
       }
     } catch {
@@ -156,12 +159,31 @@ export default function PoseEditor({
   }, [joints, running]);
 
   // 역방향: 필드 편집 → IK (명령형, effect 아님)
+  // 자세(RX/RY/RZ)는 절대 오일러를 재합성하지 않고 현재 쿼터니언에 base 축 증분 회전을
+  // 곱한다 → ry≈±90° 에서도 각 축이 독립적으로 동작(짐벌락 없음). 위치는 쿼터니언 유지.
   const setField = (k: keyof Pose6, v: number) => {
     if (!pose) return;
-    const next = { ...pose, [k]: v };
     editedAt.current = Date.now();
-    latest.current = toPose7(next);
-    setPose(next);
+    if (k === 'rx' || k === 'ry' || k === 'rz') {
+      const d = MathUtils.degToRad(v - pose[k]); // 화면 readout 대비 증분각
+      const qd = new Quaternion().setFromAxisAngle(AXES[k], d);
+      quatRef.current = qd.multiply(quatRef.current).normalize(); // base 프레임(premultiply)
+    }
+    const x = k === 'x' ? v : pose.x;
+    const y = k === 'y' ? v : pose.y;
+    const z = k === 'z' ? v : pose.z;
+    const q = quatRef.current;
+    // 표시 오일러는 결과 쿼터니언에서 재유도 (특이점 근처 readout 은 튈 수 있으나 명령은 정확)
+    const e = new Euler().setFromQuaternion(q, 'XYZ');
+    setPose({
+      x,
+      y,
+      z,
+      rx: MathUtils.radToDeg(e.x),
+      ry: MathUtils.radToDeg(e.y),
+      rz: MathUtils.radToDeg(e.z),
+    });
+    latest.current = [x, y, z, q.x, q.y, q.z, q.w];
     pump.current();
   };
 
