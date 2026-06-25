@@ -58,6 +58,16 @@ import {
 import { useSim } from '@/store';
 import { useInteractive, type InteractiveFrame } from '@/useInteractive';
 
+// 인터랙티브(grab & push)가 지원하는 제어기 — 토크 plant + 어드미턴스.
+// 나머지(velocity/force/hybrid)는 셋업이 달라 인터랙티브 미지원(셀렉터서 숨김).
+const INTERACTIVE_CTRL = [
+  'impedance',
+  'admittance',
+  'pd',
+  'pid',
+  'computed_torque',
+];
+
 type Wall = {
   shape: string;
   point?: number[];
@@ -314,7 +324,11 @@ export default function App() {
   const [meta, setMeta] = useState<JointMeta[]>([]);
   const [ready, setReady] = useState<number[]>([]); // 비특이 운용 출발 자세
   const [noiseSeed, setNoiseSeed] = useState(0); // 노이즈 realization seed
-  const controllers = CONTROLLERS;
+  const [interactive, setInteractive] = useState(false); // 실시간 grab & push 모드
+  // 인터랙티브 중엔 지원 제어기만 노출(조용한 PD 폴백 방지)
+  const controllers = interactive
+    ? CONTROLLERS.filter((c) => INTERACTIVE_CTRL.includes(c.name))
+    : CONTROLLERS;
 
   // 발표↔시뮬 라우트 전환(App 언마운트)·새로고침에도 유지 — zustand store (app/store.ts)
   const robotId = useSim((s) => s.robotId);
@@ -386,8 +400,7 @@ export default function App() {
   // 하이브리드 컨투어: 표면 미리보기(현재 자세 기준) + 표면에 그린 경로 점
   const [previewWall, setPreviewWall] = useState<Wall | null>(null);
   const [eePos, setEePos] = useState<number[] | null>(null); // 외란 화살표 앵커(EE 위치)
-  // 실시간 grab & push (인터랙티브 모드)
-  const [interactive, setInteractive] = useState(false);
+  // 실시간 grab & push (인터랙티브 모드) — interactive 는 controllers 필터에 쓰여 위로 뺐다
   const [intMode, setIntMode] = useState<'honest' | 'safe'>('honest');
   const [intFlags, setIntFlags] = useState<string[]>([]);
   const [intDiverged, setIntDiverged] = useState(false);
@@ -688,6 +701,13 @@ export default function App() {
     sendGrab,
     reset: intReset,
   } = useInteractive(interactive, intConfig, onIntFrame);
+  // 켤 때 현재 제어기가 인터랙티브 미지원이면 임피던스로 전환(폴백 혼란 방지)
+  const toggleInteractive = () => {
+    if (!interactive && !INTERACTIVE_CTRL.includes(controller)) {
+      setController('impedance');
+    }
+    setInteractive((v) => !v);
+  };
 
   return (
     <div className='bg-background relative h-screen w-screen'>
@@ -738,7 +758,7 @@ export default function App() {
         <div className='bg-card/95 supports-[backdrop-filter]:bg-card/80 flex items-center gap-3 rounded-lg border px-3 py-1.5 text-xs shadow-sm backdrop-blur'>
           <button
             type='button'
-            onClick={() => setInteractive((v) => !v)}
+            onClick={toggleInteractive}
             disabled={running}
             className={`pointer-events-auto font-medium disabled:opacity-40 ${
               interactive ? 'text-blue-600' : 'text-foreground'

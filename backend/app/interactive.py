@@ -37,10 +37,18 @@ class InteractiveSession:
                  mode="honest", setpoint=None):
         self.robot = robot
         self.controller = controller
+        self.is_adm = controller == "admittance"     # 모션 plant(별도 경로)
         g = gains or {}
         self.Kp = float(g.get("kp", 600.0))
         self.Kd = float(g.get("kd", 60.0))
         self.Ki = float(g.get("ki", 0.0))
+        # 어드미턴스(가상 M-B-K) — 힘 측정→움직임 출력. 임피던스의 쌍.
+        self.M_v = max(float(g.get("m", 2.0)), 0.1)
+        self.B_v = float(g.get("b", 40.0))
+        self.K_v = float(g.get("k", 600.0))
+        self.KP_TRACK = 20.0                         # 내부 resolved-rate 추종 게인
+        self.dp = np.zeros(3)                        # 가상 변위(base 3D)
+        self.dv = np.zeros(3)                        # 가상 속도
         self.mode = mode
         sp = robot.ready if setpoint is None else np.asarray(setpoint, float)
         self.th_d = sp.copy()                    # 유지 setpoint
@@ -115,7 +123,29 @@ class InteractiveSession:
         return self._result(sorted(flags))
 
     def _substep(self, grab_force, dt, flags):
-        """물리 한 스텝. 감쇠 암시적: (M+h·D_eff)·θ̇⁺ = M·θ̇ + h·(τ_other − bias).
+        """물리 한 스텝 — 토크 plant(임피던스/PD/PID/CT) vs 모션 plant(어드미턴스) 분기."""
+        if self.is_adm:
+            self._substep_admittance(grab_force, dt, flags)
+        else:
+            self._substep_torque(grab_force, dt, flags)
+
+    def _substep_admittance(self, grab_force, dt, flags):
+        """어드미턴스: 잡기힘 f_ext 로 가상 M-B-K 적분(힘→움직임) → 변위 dp 를
+        resolved-rate 로 추종. 임피던스(움직임→힘)의 쌍. 기구학 plant라 명시적로 충분."""
+        th = self.th
+        f_ext = (np.zeros(3) if grab_force is None
+                 else np.asarray(grab_force, float))       # 외력 그대로(부호변환 없음)
+        da = (f_ext - self.B_v * self.dv - self.K_v * self.dp) / self.M_v
+        self.dv = self.dv + da * dt
+        self.dp = self.dp + self.dv * dt
+        T_d = self.T_d.copy()
+        T_d[:3, 3] = self.T_d[:3, 3] + self.dp           # 목표 = setpoint + 가상 변위
+        Xe = SE3.log(np.linalg.inv(self.robot.fk(th)) @ T_d)[0]
+        qd = self.robot.dls_inv(self.robot.jacobian_body(th)) @ (self.KP_TRACK * Xe)
+        self._finish(th, qd, dt, flags)                  # 리밋 클램프·발산판정 공용
+
+    def _substep_torque(self, grab_force, dt, flags):
+        """토크 plant 한 스텝. 감쇠 암시적: (M+h·D_eff)·θ̇⁺ = M·θ̇ + h·(τ_other − bias).
         토크 포화 시엔 클립 토크로 명시적 적분(포화가 봉쇄 역할). flags 누적(set)."""
         th, dth = self.th, self.dth
         n = self.robot.n
