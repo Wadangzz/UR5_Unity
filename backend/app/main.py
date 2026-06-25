@@ -17,7 +17,14 @@ from pydantic import BaseModel
 from app import sim
 from app.db import init_db
 from app.meshes_setup import MESHES_DIR, prepare_meshes
-from app.routers import kinematics, mesh, programs, robots, simulate
+from app.routers import (
+    interactive_ws,
+    kinematics,
+    mesh,
+    programs,
+    robots,
+    simulate,
+)
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")  # backend/.env 로드
 
@@ -43,6 +50,8 @@ sim.warmup()                                # numba RNE JIT 사전 컴파일 (�
 # 공개(읽기/렌더): robots·kinematics. 슬라이드 3D 로봇도 이걸 씀.
 for module in (robots, kinematics):
     app.include_router(module.router)
+# 실시간 grab & push WebSocket (/ws/interactive). 스트리밍이라 별도.
+app.include_router(interactive_ws.router)
 # 보호: 시뮬 실행·DB 쓰기·메시 업로드만 인증(SIM_KEY 미설정이면 no-op).
 for module in (programs, simulate, mesh):
     app.include_router(module.router, dependencies=[Depends(require_key)])
