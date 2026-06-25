@@ -17,8 +17,10 @@ from app.core.robot_math import SE3, SO3, quintic_time_scaling
 from app.core import dynamics_fast as df       # numba JIT RNE (numpy 대비 ~14x)
 
 # --- 공통 적분/정착/발산 상수 ---
-SETTLE_MAX = 2.0        # 모션 종료 후 평형 대기 상한(s) — 계산시간 단축
+SETTLE_MAX = 2.0        # 모션 종료 후 평형 대기(s) — 속도제어 등 고정창 경로용
+SETTLE_HARD = 10.0      # adaptive 종료 절대 상한(s) — 정착 못하면 여기서 끊음(안전망)
 VEL_TOL = 0.02          # 정상상태(평형) 판정 속도 임계 rad/s
+ACC_TOL = 0.5           # 평형 판정 가속도 임계 rad/s²(·m/s²) — 진동 꼭대기(속도0·가속도↑) 배제
 VEL_WIN = 0.2           # 그 속도 이하를 유지해야 하는 윈도우 s
 THETA_MAX = 3 * np.pi   # 발산 안전망: 위치(rad), 오버슛보다 큼
 OMEGA_MAX = 20.0        # 발산 안전망: 속도(rad/s), 정상 ~2 보다 큼
@@ -186,7 +188,7 @@ def _build_ref(WP, t_seg, hold, traj_mode, robot):
 class _SolShim:
     """이산 ZOH 적분 결과를 solve_ivp 의 sol(.t/.y/.status)과 호환되게 담는 객체.
     + tau_log(샘플별 실제 인가 토크, 노이즈 chatter 포함)."""
-    __slots__ = ("t", "y", "status", "tau_log")
+    __slots__ = ("t", "y", "status", "tau_log", "diverged", "settle_t")
 
 
 def _empty_result(WP, traj_error, robot):
@@ -209,11 +211,14 @@ def _blowup_event(N):
     return blowup
 
 
-def _detect_settle(sol, T, err, vmax, hz):
+def _detect_settle(sol, T, err, vmax, hz, require_excite=False):
     """정상상태(평형) 도달 판정. → (diverged, settle_time, steady_state_error).
 
     멈춤 = 모션(T) 이후 속도가 VEL_WIN 동안 VEL_TOL 이하 유지. 잔류오차가 있어도
     평형이면 멈춤(그 시점 오차 = 정상상태 오차). 끝까지 안 멈추고 오차 증가추세면 발산.
+
+    require_excite: 외란은 모션 종료(T) 후 인가되므로, 인가 전 정지 상태를 평형으로
+    오판하지 않도록 '한 번 흔들린 뒤(excited)' 평형만 인정한다(어드미턴스와 동일 규약).
     """
     diverged = sol.status != 0          # 안전망 이벤트 발동 or 적분 실패
     if diverged:
@@ -221,10 +226,13 @@ def _detect_settle(sol, T, err, vmax, hz):
 
     vw = max(1, int(VEL_WIN * hz))
     rest = None
+    excited = not require_excite
     for i in range(len(sol.t)):
         if sol.t[i] < T:
             continue
-        if np.max(vmax[max(0, i - vw):i + 1]) < VEL_TOL:
+        if vmax[i] >= VEL_TOL:
+            excited = True
+        if excited and np.max(vmax[max(0, i - vw):i + 1]) < VEL_TOL:
             rest = i
             break
     if rest is not None:
@@ -240,13 +248,15 @@ def _detect_settle(sol, T, err, vmax, hz):
 
 
 def _keep_idx(sol, settle_time, diverged, T):
-    """반환 구간: 평형 시 그 시점+마진, 발산 시 전체, 미도달 시 모션+1s."""
+    """반환 구간: 평형 시 그 시점+마진, 그 외(발산·미도달)는 계산한 전체.
+
+    미도달(settle=None)일 때 임의 시점(예: T+1s)에서 자르면 이동 중인 모션이 화면에서
+    뚝 끊겨 보인다 → 적분한 전체를 보여줘 끊김을 없앤다(느린/언더댐프 응답 대비).
+    """
     if settle_time is not None:
         keep = sol.t <= settle_time + 0.3
-    elif diverged:
-        keep = np.ones(len(sol.t), dtype=bool)
     else:
-        keep = sol.t <= T + 1.0
+        keep = np.ones(len(sol.t), dtype=bool)
     return np.where(keep)[0]
 
 
@@ -299,7 +309,10 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
     def Ftip(t, th):
         if not has_dist or t < T:
             return np.zeros(6)
-        f_b = robot.fk(th)[:3, :3].T @ dist     # base→EE 프레임 힘
+        # 외란 = 로봇에 가해지는 외력. forward_dynamics 의 Ftip 규약은
+        # 'EE 가 환경에 가하는 렌치'(MR 표준, θ̈=M⁻¹(τ−c−g−Jᵀ·Ftip)) 이므로
+        # 로봇에 +dist 를 가하려면 Ftip=−dist 로 넣어야 한다(힘제어 벽 규약과 동일).
+        f_b = -robot.fk(th)[:3, :3].T @ dist    # base→EE 프레임, 부호 반전
         return np.concatenate([np.zeros(3), f_b])  # [모멘트; 힘] (EE 프레임)
 
     def applied(th, dth, th_d, dth_d, ddth_d, I):
@@ -309,13 +322,15 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
 
     # 제어 모드: control_rate=0 → 연속(이상화, 빠른 Radau) / >0 → 이산 ZOH(현실).
     # 노이즈는 이산 샘플링이 필요하므로 control_rate=0 이면 기본 제어율로 이산화한다.
-    T_cap = T + SETTLE_MAX
+    # T_cap 은 고정 대기가 아니라 안전 상한 — 실제로는 정착 순간 adaptive 종료한다.
+    T_cap = T + SETTLE_HARD
     rate = control_rate
     if noise > 0 and rate <= 0:
         rate = 1000.0
 
     def _continuous():
-        """연속 제어(제어율 ∞ 이상화) — 암시적 Radau. 빠르고 항상 안정적."""
+        """연속 제어(제어율 ∞ 이상화) — 암시적 Radau. 빠르고 항상 안정적.
+        고정 시간이 아니라 '진짜 평형(속도·가속도 모두 작음)'에서 adaptive 종료한다."""
         def rhs(t, x):
             th, dth = x[:N], x[N:2 * N]
             I = x[2 * N:] if use_I else np.zeros(N)
@@ -327,10 +342,33 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
             parts = [dth, ddth] + ([th_d - th] if use_I else [])
             return np.concatenate(parts)
 
+        # adaptive 종료 이벤트: 모션(T) 이후 속도·가속도가 모두 임계 이하 → 평형 → 정지.
+        # 가속도도 보므로 언더댐프 진동의 꼭대기(속도0·가속도 최대)에선 안 멈춘다.
+        def rest(t, x):
+            if t < T + VEL_WIN:                     # 모션/외란 전 + 정착창 확보 전엔 비활성
+                return 1.0
+            th, dth = x[:N], x[N:2 * N]
+            I = x[2 * N:] if use_I else np.zeros(N)
+            th_d, dth_d, ddth_d = ref(t)
+            tau = applied(th, dth, th_d, dth_d, ddth_d, I)
+            if friction > 0:
+                tau = tau - friction * np.tanh(dth / 0.02)
+            ddth = df.forward_dynamics(th, dth, tau, robot.gravity, Ftip(t, th), Mp, Gp, Sp)
+            return max(np.max(np.abs(dth)) / VEL_TOL,
+                       np.max(np.abs(ddth)) / ACC_TOL) - 1.0
+        rest.terminal = True
+        rest.direction = -1
+
         x0 = np.concatenate([WP[0], np.zeros(N)] + ([np.zeros(N)] if use_I else []))
         t_eval = np.linspace(0, T_cap, int(T_cap * hz) + 1)
         s = solve_ivp(rhs, (0, T_cap), x0, t_eval=t_eval, method="Radau",
-                      rtol=1e-4, atol=1e-7, events=_blowup_event(N))
+                      rtol=1e-4, atol=1e-7, events=[_blowup_event(N), rest])
+        s.diverged = len(s.t_events[0]) > 0         # blowup 발동 = 발산
+        s.settle_t = (float(s.t_events[1][0])       # rest 발동 = 정착 시각
+                      if len(s.t_events[1]) else None)
+        if s.settle_t is not None and len(s.t):     # 정착(거의 정지) 프레임을 끝에 추가
+            s.t = np.append(s.t, s.settle_t)        # (t_eval 은 이벤트 직전까지만 반환)
+            s.y = np.column_stack([s.y, s.y_events[1][0]])
         s.tau_log = None                            # 패킹 때 applied()로 재계산
         return s
 
@@ -345,8 +383,10 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
             n_pos = noise * rng.standard_normal((n_ticks, N))
             n_vel = 5.0 * noise * rng.standard_normal((n_ticks, N))
         th, dth, I = WP[0].copy(), np.zeros(N), np.zeros(N)
+        excited_z = not has_dist            # 외란 시 흔들린 뒤에만 정착 인정
         ts, THl, DTHl, IIl, taul = [], [], [], [], []
         diverged = False
+        settle_t = None
         for k in range(n_ticks):
             t = k * h
             th_d, dth_d, ddth_d = ref(t)
@@ -372,15 +412,28 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
                 break
             if use_I:
                 I = I + (th_d - thm) * h             # 이산 적분(측정 오차 기준)
-            if k % out_every == 0:
+            # adaptive 종료: 모션 후 흔들린 뒤 속도·가속도 모두 작으면 평형 → 정지
+            rest = False
+            if t >= T + VEL_WIN:
+                if np.max(np.abs(dth)) >= VEL_TOL:
+                    excited_z = True
+                if excited_z and np.max(np.abs(dth)) < VEL_TOL:
+                    qdd = f(np.concatenate([th, dth]))[N:]
+                    rest = np.max(np.abs(qdd)) < ACC_TOL
+            if k % out_every == 0 or rest:
                 ts.append(t); THl.append(th.copy()); DTHl.append(dth.copy())
                 IIl.append(I.copy()); taul.append(tau.copy())
+            if rest:
+                settle_t = t
+                break
 
         s = _SolShim()
         s.t = np.array(ts)
         rows = [np.array(THl).T, np.array(DTHl).T] + ([np.array(IIl).T] if use_I else [])
         s.y = np.vstack(rows) if ts else np.zeros((2 * N + (N if use_I else 0), 0))
         s.status = 1 if diverged else 0
+        s.diverged = diverged
+        s.settle_t = settle_t
         s.tau_log = np.array(taul) if ts else np.zeros((0, N))
         return s
 
@@ -395,10 +448,17 @@ def _run_torque(WP, ref, T, controller, gains, gravity_comp, hz,
                         for i, t in enumerate(sol.t)])
     else:
         err = np.array([np.linalg.norm(TH[i] - ref(t)[0]) for i, t in enumerate(sol.t)])
-    vmax = (np.max(np.abs(DTH), axis=1) if len(sol.t)
-            else np.zeros(0))               # 시각별 최대 관절속도
-
-    diverged, settle_time, steady_state_error = _detect_settle(sol, T, err, vmax, hz)
+    # 정착/발산은 adaptive 종료 이벤트(연속) / _zoh 플래그(이산)에서 직접 — 윈도우
+    # 스캔보다 정확하고, 외란 인가 전 정지를 오판하지 않는다(rest 이벤트가 T+VEL_WIN 게이트).
+    diverged = sol.diverged
+    settle_time = sol.settle_t
+    # 안전망(blowup)에 안 걸린 '느린 발산'(오차 증가추세) 보강
+    if not diverged and settle_time is None and len(err) > int(0.5 * hz):
+        win = int(0.5 * hz)
+        if err[-1] > err[-1 - win] * 1.05 and err[-1] > 0.05:
+            diverged = True
+    steady_state_error = (float(err[int(np.argmin(np.abs(sol.t - settle_time)))])
+                          if settle_time is not None and len(err) else None)
     idx = _keep_idx(sol, settle_time, diverged, T)
 
     tcp, error, torque_log = [], [], []
@@ -545,15 +605,36 @@ def _run_admittance(WP, ref, T, gains, hz, disturbance, robot):
         return np.concatenate([qd, dv, da])
 
     x0 = np.concatenate([WP[0], np.zeros(6)])
-    T_cap = T + SETTLE_MAX
+    T_cap = T + SETTLE_HARD                      # 안전 상한 — 실제론 정착서 adaptive 종료
     t_eval = np.linspace(0, T_cap, int(T_cap * hz) + 1)
 
     def blowup(t, x):
         return THETA_MAX - float(np.max(np.abs(x[:N])))
     blowup.terminal = True
     blowup.direction = -1
+
+    # adaptive 종료: 모션(T) 후 '로봇이 실제로 멈춤(qd 작음) + 가상목표 가속도 작음'.
+    # 로봇 추종(qd)이 가상 동역학(dv)보다 늦으므로 qd 기준이라야 진짜 정지에서 끊는다.
+    # 가속도(da)도 보므로 언더댐프 진동 꼭대기(qd≈0·da↑)에선 조기 종료하지 않는다.
+    def rest(t, x):
+        if t < T + VEL_WIN:
+            return 1.0
+        th, dp, dv = x[:N], x[N:N + 3], x[N + 3:N + 6]
+        da = (f_ext(t) - B * dv - K * dp) / M
+        T_set = robot.fk(ref(t)[0])
+        T_d = T_set.copy()
+        T_d[:3, 3] = T_set[:3, 3] + dp
+        Xe = SE3.log(np.linalg.inv(robot.fk(th)) @ T_d)[0]
+        qd = robot.dls_inv(robot.jacobian_body(th)) @ (KP_TRACK * Xe)
+        return max(np.max(np.abs(qd)) / VEL_TOL,
+                   np.max(np.abs(da)) / ACC_TOL) - 1.0
+    rest.terminal = True
+    rest.direction = -1
     sol = solve_ivp(rhs, (0, T_cap), x0, t_eval=t_eval, method="RK45",
-                    rtol=1e-5, atol=1e-8, events=blowup)
+                    rtol=1e-5, atol=1e-8, events=[blowup, rest])
+    if len(sol.t_events[1]) and len(sol.t):         # 정착(거의 정지) 프레임을 끝에 추가
+        sol.t = np.append(sol.t, sol.t_events[1][0])
+        sol.y = np.column_stack([sol.y, sol.y_events[1][0]])
 
     TH = sol.y[:N].T
     QD, err = [], []
@@ -568,24 +649,13 @@ def _run_admittance(WP, ref, T, gains, hz, disturbance, robot):
         err.append(float(np.linalg.norm(robot.fk(TH[i])[:3, 3] - T_set[:3, 3])))
     QD = np.array(QD) if len(QD) else np.zeros((0, N))
     err = np.array(err)
-    vmax = np.max(np.abs(QD), axis=1) if len(QD) else np.zeros(0)
 
-    # 정착: 외란은 모션 종료(T) 후 인가되므로, '한 번 흔들린 뒤(excited)' 평형을 찾는다.
-    # (인가 순간 로봇이 정지해 있어 곧바로 정착으로 오판하는 것 방지)
-    diverged = sol.status != 0
-    settle_time = steady_state_error = None
-    if not diverged and len(sol.t):
-        vw = max(1, int(VEL_WIN * hz))
-        excited = False
-        for i in range(len(sol.t)):
-            if sol.t[i] < T:
-                continue
-            if vmax[i] >= VEL_TOL:
-                excited = True
-            if excited and np.max(vmax[max(0, i - vw):i + 1]) < VEL_TOL:
-                settle_time = float(sol.t[i])
-                steady_state_error = float(err[i])
-                break
+    # 정착/발산은 종료 이벤트에서 직접: blowup=발산, rest=정착(로봇 정지+가상 평형).
+    # 둘 다 terminal 이라 status 로는 구분 못 하므로 t_events 로 가른다.
+    diverged = len(sol.t_events[0]) > 0
+    settle_time = (float(sol.t_events[1][0]) if len(sol.t_events[1]) else None)
+    steady_state_error = (float(err[int(np.argmin(np.abs(sol.t - settle_time)))])
+                          if settle_time is not None and len(err) else None)
 
     idx = _keep_idx(sol, settle_time, diverged, T)
 
