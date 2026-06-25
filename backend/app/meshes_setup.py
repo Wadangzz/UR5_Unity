@@ -31,9 +31,6 @@ _ROBOT_DESC = {
     "omx": "open_manipulator_x_description",
 }
 
-# 레거시 /api/robot (UR5 단일) 호환용 package 이름
-PACKAGE_NAME = "example-robot-data"
-
 _MESH_RE = re.compile(r'package://([^/]+)/(.+?\.(?:dae|stl|obj|DAE|STL|OBJ))')
 
 # robot_id → {"urdf_url", "packages"} (지연 준비·캐시)
@@ -93,8 +90,3 @@ def prepare_meshes():
     """서버 부팅: MESHES_DIR 보장 + 기본 로봇(UR5) 준비(멱등)."""
     os.makedirs(MESHES_DIR, exist_ok=True)
     return robot_assets("ur5")
-
-
-def urdf_url():
-    """레거시 /api/robot 용 — 기본 로봇(UR5) URDF 의 정적 URL."""
-    return robot_assets("ur5")["urdf_url"]

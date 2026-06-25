@@ -101,42 +101,11 @@ class SE3:
         return np.concatenate([SO3.vee(V_hat[:3, :3]), V_hat[:3, 3]])
 
     @staticmethod
-    def exp(degree, screw, joint='R', unit='degree'):
-        """
-        exp: se(3) → SE(3). 관절 screw 축과 변위 → 4x4 변환행렬.
-        :param degree: 회전각(R) 또는 직선변위(P)
-        :param screw : 6D screw 축 [ω(3), v(3)]
-        :param joint : 'R'(회전) 또는 'P'(직동)
-        :param unit  : 'degree' 또는 'radian'
-        """
-        if unit == 'degree':
-            theta = np.deg2rad(degree) if joint == 'R' else degree
-        elif unit == 'radian':
-            theta = degree if joint == 'R' else np.rad2deg(degree)
-
-        omega = screw[:3]
-        v = screw[3:6]
-
-        omega_hat = SO3.hat(omega)
-        omega_hat_sq = omega_hat @ omega_hat
-
-        rot = np.eye(3) + np.sin(theta) * omega_hat + (1 - np.cos(theta)) * omega_hat_sq
-        G_theta = (np.eye(3) * theta
-                   + (1 - np.cos(theta)) * omega_hat
-                   + (theta - np.sin(theta)) * omega_hat_sq)
-        p = G_theta @ v
-
-        T = np.eye(4)
-        T[:3, :3] = rot
-        T[:3, 3] = p
-        return T
-
-    @staticmethod
     def exp6(twist):
         """
         exp: se(3) → SE(3) (일반형). 6D twist 전체를 지수사상.
-        SE3.exp 과 달리 각도가 인자로 분리돼 있지 않고, twist 의
-        회전부 노름 ||ω|| 가 곧 θ 이다 (동역학 RNE 내부에서 사용).
+        각도가 인자로 분리돼 있지 않고, twist 의 회전부 노름 ||ω|| 가 곧 θ 이다
+        (FK·동역학 RNE 내부에서 사용).
         :param twist: 6D twist [ω(3), v(3)] (= screw·θ)
         """
         omega = np.asarray(twist[:3], dtype=float)
@@ -257,19 +226,6 @@ class SE3:
         R_mat = T_sb[:3, :3]
         return SO3.to_quat(R_mat).tolist(), SO3.to_euler(R_mat).tolist()
 
-    @staticmethod
-    def pose_euler_to_quat(pose, degree=True):
-        """
-        pose 의 Euler 자세를 quaternion 으로 변환 (위치는 유지).
-        :param pose: [x, y, z, roll, pitch, yaw]
-        :return: [x, y, z, qx, qy, qz, qw]
-        """
-        roll, pitch, yaw = pose[3], pose[4], pose[5]
-        if degree:
-            roll, pitch, yaw = np.deg2rad([roll, pitch, yaw])
-        quat = R.from_euler('xyz', [roll, pitch, yaw]).as_quat().tolist()
-        return pose[:3] + quat
-
 
 # ======================================================================
 #  Kinematics — SO3/SE3 연산을 조합한 알고리즘 계층 (Jacobian, IK)
@@ -343,20 +299,6 @@ class Kinematics:
             theta = theta + Kinematics.dls_inv(
                 Kinematics.jacobian_body(Blist, theta)) @ Vb
         return wrap(theta), False
-
-    @staticmethod
-    def fk_skeleton(Slist, M_home, theta):
-        """관절 screw 축점 기준 스켈레톤 (시각화용). (n+2, 3)."""
-        n = Slist.shape[1]
-        pts = [np.zeros(3)]
-        prod = np.eye(4)
-        for i in range(n):
-            w, v = Slist[:3, i], Slist[3:, i]
-            q = np.cross(w, v)
-            pts.append((prod @ np.append(q, 1.0))[:3])
-            prod = prod @ SE3.exp6(Slist[:, i] * theta[i])
-        pts.append((prod @ M_home)[:3, 3])
-        return np.array(pts)
 
 
 # ======================================================================

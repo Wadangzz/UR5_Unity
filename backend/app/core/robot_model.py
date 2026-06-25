@@ -52,9 +52,6 @@ class RobotModel:
         return Kinematics.ik(self.M_home, self.Blist, T_target,
                              theta0, eomg, ev, max_iter)
 
-    def fk_skeleton(self, theta):
-        return Kinematics.fk_skeleton(self.Slist, self.M_home, theta)
-
     @classmethod
     def from_urdf(cls, urdf_path, ee_link=None, **kw):
         from app.core.urdf_loader import load_mr_model

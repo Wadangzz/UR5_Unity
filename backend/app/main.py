@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app import sim
 from app.db import init_db
 from app.meshes_setup import MESHES_DIR, prepare_meshes
-from app.routers import kinematics, mesh, programs, robot, robots, simulate
+from app.routers import kinematics, mesh, programs, robots, simulate
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")  # backend/.env 로드
 
@@ -40,8 +40,8 @@ init_db()                                   # 테이블 생성 (멱등)
 prepare_meshes()                            # URDF + 메시를 app/meshes/ 로 복사 (멱등)
 sim.warmup()                                # numba RNE JIT 사전 컴파일 (첫 요청 지연 방지)
 
-# 공개(읽기/렌더): robot·robots·kinematics. 슬라이드 3D 로봇도 이걸 씀.
-for module in (robot, robots, kinematics):
+# 공개(읽기/렌더): robots·kinematics. 슬라이드 3D 로봇도 이걸 씀.
+for module in (robots, kinematics):
     app.include_router(module.router)
 # 보호: 시뮬 실행·DB 쓰기·메시 업로드만 인증(SIM_KEY 미설정이면 no-op).
 for module in (programs, simulate, mesh):
